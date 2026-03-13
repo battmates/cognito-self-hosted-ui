@@ -54,6 +54,114 @@ class CognitoIdentityService
         ];
     }
 
+    public function socialProviders(): array
+    {
+        $providers = config('services.cognito.social_providers', []);
+
+        return array_values(array_filter($providers, function ($provider): bool {
+            return is_array($provider)
+                && is_string($provider['slug'] ?? null)
+                && is_string($provider['label'] ?? null)
+                && is_string($provider['identity_provider'] ?? null);
+        }));
+    }
+
+    public function buildSocialLoginUrl(string $providerSlug, array $context = []): array
+    {
+        $provider = collect($this->socialProviders())
+            ->first(fn (array $candidate) => $candidate['slug'] === $providerSlug);
+
+        if (! is_array($provider)) {
+            throw new RuntimeException('That social sign-in provider is not available.');
+        }
+
+        $domain = rtrim((string) config('services.cognito.domain'), '/');
+        $clientId = (string) config('services.cognito.client_id');
+        $redirectUri = (string) config('services.cognito.redirect_uri');
+
+        if ($domain === '' || $clientId === '' || $redirectUri === '') {
+            throw new RuntimeException('Cognito social sign-in is not configured correctly.');
+        }
+
+        $state = $this->encodeState([
+            'nonce' => bin2hex(random_bytes(16)),
+            'provider' => $provider['slug'],
+            'context' => $context,
+            'issued_at' => now()->timestamp,
+        ]);
+
+        $url = $domain.'/oauth2/authorize?'.http_build_query([
+            'identity_provider' => $provider['identity_provider'],
+            'redirect_uri' => $redirectUri,
+            'response_type' => 'code',
+            'client_id' => $clientId,
+            'scope' => implode(' ', config('services.cognito.scopes', ['openid', 'email', 'profile'])),
+            'state' => $state,
+        ]);
+
+        return [
+            'provider' => $provider['label'],
+            'state' => $state,
+            'url' => $url,
+        ];
+    }
+
+    public function exchangeAuthorizationCode(string $code, array $context = []): array
+    {
+        $domain = rtrim((string) config('services.cognito.domain'), '/');
+        $clientId = (string) config('services.cognito.client_id');
+        $redirectUri = (string) config('services.cognito.redirect_uri');
+
+        if ($domain === '' || $clientId === '' || $redirectUri === '') {
+            throw new RuntimeException('Cognito social sign-in is not configured correctly.');
+        }
+
+        $payload = [
+            'grant_type' => 'authorization_code',
+            'client_id' => $clientId,
+            'redirect_uri' => $redirectUri,
+            'code' => $code,
+        ];
+
+        $clientSecret = config('services.cognito.client_secret');
+        if (is_string($clientSecret) && $clientSecret !== '') {
+            $payload['client_secret'] = $clientSecret;
+        }
+
+        $response = $this->http
+            ->asForm()
+            ->acceptJson()
+            ->post($domain.'/oauth2/token', $payload);
+
+        if ($response->failed()) {
+            $message = $response->json('error_description')
+                ?: $response->json('error')
+                ?: 'Cognito token exchange failed.';
+
+            throw new RuntimeException(is_string($message) ? $message : 'Cognito token exchange failed.');
+        }
+
+        $result = $response->json();
+        if (! is_array($result) || empty($result['id_token'])) {
+            throw new RuntimeException('Cognito did not return a usable social sign-in response.');
+        }
+
+        $tokens = [
+            'id_token' => $result['id_token'],
+            'access_token' => $result['access_token'] ?? null,
+            'refresh_token' => $result['refresh_token'] ?? null,
+            'expires_in' => $result['expires_in'] ?? null,
+            'token_type' => $result['token_type'] ?? null,
+        ];
+
+        $claims = $this->validateIdToken($tokens['id_token']);
+
+        return [
+            'tokens' => $tokens,
+            'user' => $this->buildSessionUser($claims, $context),
+        ];
+    }
+
     public function register(array $input): array
     {
         $attributes = array_values(array_filter([
@@ -64,35 +172,35 @@ class CognitoIdentityService
 
         $payload = $this->call('SignUp', [
             'ClientId' => config('services.cognito.client_id'),
-            'Username' => $input['email'],
+            'Username' => $input['username'],
             'Password' => $input['password'],
-            'SecretHash' => $this->secretHash($input['email']),
+            'SecretHash' => $this->secretHash($input['username']),
             'UserAttributes' => $attributes,
         ]);
 
         return [
-            'username' => $payload['UserSub'] ?? $input['email'],
+            'username' => $input['username'],
             'email' => $input['email'],
             'confirmed' => (bool) ($payload['UserConfirmed'] ?? false),
         ];
     }
 
-    public function confirmRegistration(string $email, string $code): void
+    public function confirmRegistration(string $username, string $code): void
     {
         $this->call('ConfirmSignUp', [
             'ClientId' => config('services.cognito.client_id'),
-            'Username' => $email,
+            'Username' => $username,
             'ConfirmationCode' => $code,
-            'SecretHash' => $this->secretHash($email),
+            'SecretHash' => $this->secretHash($username),
         ]);
     }
 
-    public function resendConfirmation(string $email): void
+    public function resendConfirmation(string $username): void
     {
         $this->call('ResendConfirmationCode', [
             'ClientId' => config('services.cognito.client_id'),
-            'Username' => $email,
-            'SecretHash' => $this->secretHash($email),
+            'Username' => $username,
+            'SecretHash' => $this->secretHash($username),
         ]);
     }
 
@@ -155,6 +263,7 @@ class CognitoIdentityService
             'first_name' => $firstName,
             'last_name' => $lastName,
             'name' => trim(implode(' ', array_filter([$firstName, $lastName]))) ?: Arr::get($claims, 'name'),
+            'user_role' => Arr::get($claims, 'custom:user_role'),
             'roles' => array_values(array_unique($roles)),
             'consumer' => $context['consumer'] ?? null,
             'origin' => $context['origin'] ?? null,
@@ -219,14 +328,14 @@ class CognitoIdentityService
     private function mapErrorMessage(string $errorType, string $fallback): string
     {
         return match (true) {
-            str_contains($errorType, 'NotAuthorizedException') => 'Incorrect email or password.',
+            str_contains($errorType, 'NotAuthorizedException') => 'Incorrect email, username, or password.',
             str_contains($errorType, 'UsernameExistsException') => 'An account with this email already exists.',
             str_contains($errorType, 'UserNotConfirmedException') => 'This account is not confirmed yet.',
             str_contains($errorType, 'CodeMismatchException') => 'The confirmation code is invalid.',
             str_contains($errorType, 'ExpiredCodeException') => 'The confirmation code has expired.',
             str_contains($errorType, 'InvalidPasswordException') => 'The password does not meet the Cognito policy.',
             str_contains($errorType, 'LimitExceededException') => 'Too many attempts. Try again later.',
-            str_contains($errorType, 'UserNotFoundException') => 'No account was found for that email.',
+            str_contains($errorType, 'UserNotFoundException') => 'No account was found for that email or username.',
             default => $fallback,
         };
     }
@@ -306,6 +415,11 @@ class CognitoIdentityService
             'exp' => now()->addMinutes(5)->timestamp,
             'user' => $user,
         ], $secret, 'HS256');
+    }
+
+    private function encodeState(array $payload): string
+    {
+        return rtrim(strtr(base64_encode(json_encode($payload, JSON_THROW_ON_ERROR)), '+/', '-_'), '=');
     }
 
     private function secretHash(string $username): ?string

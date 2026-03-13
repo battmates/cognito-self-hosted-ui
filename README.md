@@ -1,6 +1,6 @@
 # RSL Group Auth
 
-Central Laravel auth portal for Cognito-backed sign-in, registration, account confirmation, forgot password, and password reset.
+Central Laravel auth portal for Cognito-backed sign-in, registration, account confirmation, forgot password, password reset, and social sign-in.
 
 Downstream apps such as WordPress, Laravel, and .NET sites are intended to redirect users here instead of sending them to Cognito Hosted UI. Users complete the auth flow on this app, and on successful sign-in the portal can return them to the originating app with a short-lived signed `sso_token`.
 
@@ -15,9 +15,10 @@ Downstream apps such as WordPress, Laravel, and .NET sites are intended to redir
 ## Current flow
 
 1. A downstream app redirects the user to this portal, optionally with `consumer` and `redirect_to`.
-2. The portal renders its own auth form.
-3. Laravel calls Cognito User Pool APIs directly.
-4. On successful sign-in:
+2. The portal renders its own auth form at `/`, `/login`, `/register`, and the related account pages.
+3. Username/password, registration, confirmation, and password reset use Cognito User Pool APIs directly from Laravel.
+4. Social providers use Cognito's OAuth authorize and token endpoints so the user can go straight to Google, Microsoft, Facebook, or Apple and return authenticated.
+5. On successful sign-in:
    - if `redirect_to` is present and allowed for the consumer, the user is returned there with `sso_token`
    - otherwise the user stays on the portal and sees signed-in status
 
@@ -32,13 +33,15 @@ Downstream apps such as WordPress, Laravel, and .NET sites are intended to redir
 
 ## Cognito requirements
 
-This app does not use Cognito Hosted UI for the main auth flow.
+This app does not use Cognito Hosted UI screens for the main auth flow.
 
 Your Cognito app client needs to support direct authentication, specifically:
 
 - `USER_PASSWORD_AUTH` or equivalent direct username/password flow
 - sign-up and confirmation APIs
 - forgot-password and confirm-forgot-password APIs
+- a Cognito domain configured for social provider redirects
+- callback URL including `http://localhost:8000/auth/callback` for local development
 
 If the Cognito app client has a secret, this app computes `SECRET_HASH` server-side.
 
@@ -67,6 +70,8 @@ COGNITO_USER_POOL_ID=
 COGNITO_CLIENT_ID=
 COGNITO_CLIENT_SECRET=
 COGNITO_AUTH_FLOW=USER_PASSWORD_AUTH
+COGNITO_DOMAIN=
+COGNITO_REDIRECT_URI="${APP_URL}/auth/callback"
 
 SSO_SITE_WORDPRESS_BASE_URL=
 SSO_SITE_WORDPRESS_ALLOWED_RETURN_HOSTS=
@@ -129,8 +134,10 @@ npm run dev
 
 ## Useful routes
 
-- `/` status page
+- `/` login page when signed out, status page when signed in
 - `/login` sign in
+- `/login/{provider}` direct social sign-in entry point
+- `/auth/callback` social sign-in callback
 - `/register` create account
 - `/register/confirm` confirm sign-up code
 - `/forgot-password` request reset code

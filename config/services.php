@@ -35,9 +35,31 @@ return [
         'client_secret' => env('COGNITO_CLIENT_SECRET'),
         'auth_flow' => env('COGNITO_AUTH_FLOW', 'USER_PASSWORD_AUTH'),
         'domain' => env('COGNITO_DOMAIN'),
-        'redirect_uri' => env('COGNITO_REDIRECT_URI', rtrim(env('APP_URL', 'http://localhost:8000'), '/').'/callback'),
+        'redirect_uri' => env('COGNITO_REDIRECT_URI', rtrim(env('APP_URL', 'http://localhost:8000'), '/').'/auth/callback'),
         'logout_uri' => env('COGNITO_LOGOUT_URI', rtrim(env('APP_URL', 'http://localhost:8000'), '/').'/logout'),
         'scopes' => array_values(array_filter(array_map('trim', explode(' ', env('COGNITO_SCOPES', 'openid email profile'))))),
+        'social_providers' => [
+            [
+                'slug' => 'google',
+                'label' => 'Google',
+                'identity_provider' => 'Google',
+            ],
+            [
+                'slug' => 'microsoft',
+                'label' => 'Microsoft',
+                'identity_provider' => 'Microsoft',
+            ],
+            [
+                'slug' => 'facebook',
+                'label' => 'Facebook',
+                'identity_provider' => 'Facebook',
+            ],
+            [
+                'slug' => 'apple',
+                'label' => 'Apple',
+                'identity_provider' => 'SignInWithApple',
+            ],
+        ],
     ],
 
     'slack' => [

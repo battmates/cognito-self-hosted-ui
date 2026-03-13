@@ -3,6 +3,63 @@
 @source '../**/*.blade.php';
 @source '../**/*.js';
 
+@font-face {
+    font-family: 'Webnar';
+    src: url('../fonts/webnar-regular.woff2') format('woff2'),
+        url('../fonts/webnar-regular.woff') format('woff');
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Webnar';
+    src: url('../fonts/webnar-semibold.woff2') format('woff2'),
+        url('../fonts/webnar-semibold.woff') format('woff');
+    font-weight: 600;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Webnar';
+    src: url('../fonts/webnar-bold.woff2') format('woff2'),
+        url('../fonts/webnar-bold.woff') format('woff');
+    font-weight: 700;
+    font-style: normal;
+    font-display: swap;
+}
+
 @theme {
-    --font-sans: 'Avenir Next', Montserrat, ui-sans-serif, system-ui, sans-serif;
+    --font-sans: 'Webnar', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen-Sans, Ubuntu, Cantarell,
+        'Helvetica Neue', sans-serif;
+}
+
+body {
+    font-family: var(--font-sans);
+}
+
+h1 {
+    margin: 0 0 0.5em 0;
+}
+
+h1,
+h2 {
+    font-weight: 700;
+}
+
+h3 {
+    font-weight: 600;
+}
+
+@media (min-width: 1200px) {
+    h1,
+    .h1 {
+        font-size: 2.5rem;
+    }
+
+    h2,
+    .h2 {
+        font-size: 2rem;
+    }
 }

@@ -1,0 +1,8 @@
+@import 'tailwindcss';
+
+@source '../**/*.blade.php';
+@source '../**/*.js';
+
+@theme {
+    --font-sans: 'Avenir Next', Montserrat, ui-sans-serif, system-ui, sans-serif;
+}

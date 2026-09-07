@@ -24,7 +24,22 @@ class ExampleTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('Email or username', false);
+        $response->assertSee('Create Account', false);
+        $response->assertSee('data-auth-panel="login"', false);
+        $response->assertSee('data-auth-panel="register"', false);
+        $response->assertSee('aria-selected="true"', false);
         $response->assertSee('Forgot password', false);
+    }
+
+    public function test_register_page_opens_the_register_mobile_tab(): void
+    {
+        $response = $this->get('/register');
+
+        $response->assertOk();
+        $response->assertSee('data-active-panel="register"', false);
+        $response->assertSee('id="register-tab"', false);
+        $response->assertSee('Create Account', false);
+        $response->assertSee('Sign In', false);
     }
 
     public function test_login_shows_cognito_error_message(): void

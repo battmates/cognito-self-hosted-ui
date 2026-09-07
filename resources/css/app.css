@@ -237,6 +237,19 @@ body {
     }
 }
 
+.portal-footer-logo svg {
+    fill: currentColor;
+}
+
+/* Override the SVG's inline artwork colours while preserving unfilled lines. */
+:root[data-theme='dark'] .portal-footer-logo svg :is(path, rect) {
+    fill: currentColor !important;
+}
+
+:root[data-theme='dark'] .portal-footer-logo svg line {
+    stroke: currentColor !important;
+}
+
 .portal-footer-logo {
     color: var(--portal-footer);
 }
@@ -290,3 +303,50 @@ h3 {
         font-size: 2rem;
     }
 }
+
+/* Status labels share a compact button shape without implying an action. */
+.portal-status-badge {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid;
+    border-radius: 0.5rem;
+    padding: 0.35rem 0.65rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.25rem;
+    white-space: nowrap;
+}
+
+.portal-status-badge--success { background: #e8f6ee; border-color: #b5dfc5; color: #21623e; }
+.portal-status-badge--warning { background: #fff3d9; border-color: #eed19b; color: #80500c; }
+.portal-status-badge--danger { background: #fcebec; border-color: #efbdc2; color: #9c303d; }
+.portal-status-badge--info { background: #e6f3fb; border-color: #b2d6ed; color: #236180; }
+.portal-status-badge--neutral { background: #eef0f3; border-color: #d0d6de; color: #505d6c; }
+
+:root[data-theme='dark'] .portal-status-badge--success { background: #183d2d; border-color: #316849; color: #a5e1bb; }
+:root[data-theme='dark'] .portal-status-badge--warning { background: #42331a; border-color: #786035; color: #f6d28c; }
+:root[data-theme='dark'] .portal-status-badge--danger { background: #45262d; border-color: #7f424e; color: #ffbbc4; }
+:root[data-theme='dark'] .portal-status-badge--info { background: #203849; border-color: #3d6680; color: #acd9f3; }
+:root[data-theme='dark'] .portal-status-badge--neutral { background: #2a323c; border-color: #4c5868; color: #c7d0dc; }
+
+.portal-row-action-trigger:hover,
+.portal-row-action-trigger:focus-visible,
+.portal-row-menu-item:hover,
+.portal-row-menu-item:focus-visible {
+    background: var(--portal-input-bg);
+    outline: 2px solid #3da7c7;
+    outline-offset: 1px;
+}
+
+.portal-row-menu-item {
+    display: block;
+    width: 100%;
+    border-radius: 0.5rem;
+    padding: 0.6rem 0.75rem;
+    text-align: left;
+    font-size: 0.875rem;
+}
+
+.portal-row-menu-item:disabled { opacity: 0.4; cursor: not-allowed; }
+.portal-row-menu-item--danger { color: #a72f3e; }
+:root[data-theme='dark'] .portal-row-menu-item--danger { color: #ffbbc4; }

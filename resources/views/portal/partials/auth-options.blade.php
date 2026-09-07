@@ -5,7 +5,7 @@
 @endphp
 
 <section
-    class="auth-options w-full pt-16 lg:pt-12"
+    class="auth-options w-full"
     data-auth-options
     data-active-panel="{{ $activeAuthPanel }}"
 >
@@ -84,9 +84,10 @@
                     <div class="grid gap-3 sm:grid-cols-2 md:grid-cols-1 lg:grid-cols-2">
                         @foreach ($socialProviders as $provider)
                             <a
-                                class="portal-secondary-button inline-flex items-center justify-center rounded-xl border px-4 py-3 text-center font-semibold transition"
+                                class="portal-secondary-button inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-3 text-center font-semibold transition"
                                 href="{{ route('portal.login.provider', array_merge(['provider' => $provider['slug']], array_filter($portalContext))) }}"
                             >
+                                @include('portal.partials.provider-icon', ['slug' => $provider['slug']])
                                 Continue with {{ $provider['label'] }}
                             </a>
                         @endforeach
@@ -127,11 +128,13 @@
                 <div class="grid gap-4 sm:grid-cols-2">
                     <div>
                         <label class="portal-label mb-2 block text-sm font-semibold uppercase tracking-[0.14em]" for="register-first-name">First name</label>
-                        <input class="portal-input w-full rounded-xl border px-4 py-3 text-base outline-none focus:border-[#3da7c7]" id="register-first-name" type="text" name="first_name" value="{{ old('first_name') }}" placeholder="First name" autocomplete="given-name">
+                        <input class="portal-input w-full rounded-xl border px-4 py-3 text-base outline-none focus:border-[#3da7c7]" id="register-first-name" type="text" name="first_name" required value="{{ old('first_name') }}" placeholder="First name" autocomplete="given-name">
+                        @error('first_name')<p class="mt-2 text-sm text-[#b56f2f]">{{ $message }}</p>@enderror
                     </div>
                     <div>
                         <label class="portal-label mb-2 block text-sm font-semibold uppercase tracking-[0.14em]" for="register-last-name">Last name</label>
-                        <input class="portal-input w-full rounded-xl border px-4 py-3 text-base outline-none focus:border-[#3da7c7]" id="register-last-name" type="text" name="last_name" value="{{ old('last_name') }}" placeholder="Last name" autocomplete="family-name">
+                        <input class="portal-input w-full rounded-xl border px-4 py-3 text-base outline-none focus:border-[#3da7c7]" id="register-last-name" type="text" name="last_name" required value="{{ old('last_name') }}" placeholder="Last name" autocomplete="family-name">
+                        @error('last_name')<p class="mt-2 text-sm text-[#b56f2f]">{{ $message }}</p>@enderror
                     </div>
                 </div>
 

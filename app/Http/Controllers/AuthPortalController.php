@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\AuthorizationBroker;
 use App\Services\CognitoIdentityService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
@@ -13,27 +14,51 @@ class AuthPortalController extends Controller
 {
     public function __construct(
         private readonly CognitoIdentityService $identity,
-    ) {
+        private readonly AuthorizationBroker $broker,
+    ) {}
+
+    public function home(Request $request): View|RedirectResponse
+    {
+        // A direct visit starts a new portal journey, without a stale app redirect.
+        if (! $request->hasAny(['client_id', 'redirect_uri', 'response_type'])) {
+            $request->session()->forget(['portal.authorization', 'portal.context']);
+        }
+
+        return $this->entry($request, 'login');
     }
 
-    public function home(Request $request): View
+    public function login(Request $request): View|RedirectResponse
     {
-        $authStatus = $request->session()->get('auth.status', [
-            'authenticated' => false,
-            'user' => null,
-        ]);
-
-        return $this->renderPage($request, ($authStatus['authenticated'] ?? false) ? 'status' : 'login', $authStatus);
+        return $this->entry($request, 'login');
     }
 
-    public function login(Request $request): View
+    public function register(Request $request): View|RedirectResponse
     {
-        return $this->renderPage($request, 'login');
+        return $this->entry($request, 'register');
     }
 
-    public function register(Request $request): View
+    private function entry(Request $request, string $page): View|RedirectResponse
     {
-        return $this->renderPage($request, 'register');
+        $context = $this->capturePortalContext($request);
+        $authorization = $request->session()->get('portal.authorization');
+        if (($authorization['prompt'] ?? null) === 'forgot_password') {
+            $authorization['prompt'] = null;
+            $request->session()->put('portal.authorization', $authorization);
+            $request->session()->put('portal.journeys.'.$authorization['request_id'], $authorization);
+            $request->attributes->set('portal.captured', $authorization);
+
+            return $this->renderPage($request, 'forgot-password');
+        }
+        if ($request->session()->get('auth.status.authenticated') && ($authorization['prompt'] ?? null) !== 'login') {
+            return $authorization ? $this->completeLogin($request) : $this->renderPage($request, 'status');
+        }
+        if (($authorization['prompt'] ?? null) === 'none') {
+            $request->session()->forget('portal.authorization');
+
+            return redirect()->away($this->broker->redirect($authorization, ['error' => 'login_required']));
+        }
+
+        return $this->renderPage($request, $page);
     }
 
     public function privacyPolicy(Request $request): View
@@ -73,8 +98,8 @@ class AuthPortalController extends Controller
     {
         $context = $this->capturePortalContext($request);
         $validated = $request->validate([
-            'email' => ['required', 'string'],
-            'password' => ['required', 'string'],
+            'email' => ['required', 'string', 'max:128'],
+            'password' => ['required', 'string', 'max:256'],
         ]);
 
         try {
@@ -85,27 +110,69 @@ class AuthPortalController extends Controller
             ]);
         }
 
-        $request->session()->put('auth.status', [
-            'authenticated' => true,
-            'user' => $result['user'],
-        ]);
+        return $this->acceptAuthentication($request, $result);
+    }
+
+    private function acceptAuthentication(Request $request, array $result): RedirectResponse
+    {
+        if (isset($result['challenge'])) {
+            $request->session()->forget(['auth.status', 'auth.tokens']);
+            $result['challenge']['authorization'] = $request->session()->get('portal.authorization');
+            $request->session()->put('portal.challenge', $result['challenge']);
+
+            return redirect()->route('portal.challenge', ['portal_request' => $request->session()->get('portal.authorization.request_id', 'direct')]);
+        }
+        $request->session()->forget('portal.challenge');
+        $request->session()->regenerate();
+        $request->session()->put('auth.status', ['authenticated' => true, 'user' => $result['user']]);
         $request->session()->put('auth.tokens', $result['tokens']);
 
+        return $this->completeLogin($request);
+    }
+
+    private function completeLogin(Request $request): RedirectResponse
+    {
+        $authorization = $request->session()->get('portal.authorization');
+        if ($authorization) {
+            $url = $this->broker->issue($authorization, $request->session()->get('auth.tokens', []));
+            $request->session()->forget(['portal.authorization', 'portal.context', 'portal.journeys.'.$authorization['request_id']]);
+
+            return redirect()->away($url);
+        }
+
+        return redirect()->route('portal.home')->with('portal.notice', 'Signed in successfully.');
+    }
+
+    public function challenge(Request $request): View|RedirectResponse
+    {
+        if (! $request->session()->has('portal.challenge')) {
+            return redirect()->route('portal.login');
+        }
+
+        return $this->renderPage($request, 'challenge');
+    }
+
+    public function storeChallenge(Request $request): RedirectResponse
+    {
+        $challenge = $request->session()->get('portal.challenge');
+        if (! $challenge || ($challenge['expires_at'] ?? 0) < time()) {
+            $request->session()->forget('portal.challenge');
+
+            return redirect()->route('portal.login')->with('portal.error', 'The verification step expired. Please sign in again.');
+        }
+        $input = $request->validate([
+            'code' => [$challenge['name'] === 'NEW_PASSWORD_REQUIRED' ? 'nullable' : 'required', 'string', 'max:20'],
+            'password' => [$challenge['name'] === 'NEW_PASSWORD_REQUIRED' ? 'required' : 'nullable', 'string', 'confirmed', 'max:256'],
+            'given_name' => ['nullable', 'string', 'max:256'], 'family_name' => ['nullable', 'string', 'max:256'], 'email' => ['nullable', 'email'],
+        ]);
+        $request->session()->put('portal.authorization', $challenge['authorization'] ?? null);
         try {
-            $returnUrl = $this->identity->buildReturnUrl($context, $result['user']);
+            $result = $this->identity->respondToChallenge($challenge, $input, $this->capturePortalContext($request));
         } catch (RuntimeException $exception) {
-            return redirect()
-                ->route('portal.home')
-                ->with('portal.error', $exception->getMessage());
+            throw ValidationException::withMessages(['code' => $exception->getMessage()]);
         }
 
-        if ($returnUrl) {
-            return redirect()->away($returnUrl);
-        }
-
-        return redirect()
-            ->route('portal.home')
-            ->with('portal.notice', 'Signed in successfully. No origin app was provided, so you remain on the auth portal.');
+        return $this->acceptAuthentication($request, $result);
     }
 
     public function storeRegistration(Request $request): RedirectResponse
@@ -114,9 +181,9 @@ class AuthPortalController extends Controller
         $validated = $request->validate([
             'username' => ['required', 'string', 'max:64'],
             'email' => ['required', 'email'],
-            'password' => ['required', 'string', 'confirmed'],
-            'first_name' => ['nullable', 'string'],
-            'last_name' => ['nullable', 'string'],
+            'password' => ['required', 'string', 'confirmed', 'max:256'],
+            'first_name' => ['required', 'string', 'max:256'],
+            'last_name' => ['required', 'string', 'max:256'],
             'accept_policies' => ['accepted'],
         ]);
 
@@ -130,17 +197,18 @@ class AuthPortalController extends Controller
 
         if ($result['confirmed']) {
             return redirect()
-                ->route('portal.login', ['email' => $validated['email']])
+                ->route('portal.login', ['portal_request' => $request->session()->get('portal.authorization.request_id', 'direct'), 'email' => $validated['email']])
                 ->with('portal.notice', 'Account created successfully. Please sign in.');
         }
 
         return redirect()
-            ->route('portal.register.confirm', ['email' => $validated['email'], 'username' => $validated['username']])
+            ->route('portal.register.confirm', ['portal_request' => $request->session()->get('portal.authorization.request_id', 'direct'), 'email' => $validated['email'], 'username' => $validated['username']])
             ->with('portal.notice', 'Check your email for the confirmation code.');
     }
 
     public function storeRegistrationConfirmation(Request $request): RedirectResponse
     {
+        $this->capturePortalContext($request);
         $validated = $request->validate([
             'username' => ['required', 'string'],
             'email' => ['required', 'email'],
@@ -156,12 +224,13 @@ class AuthPortalController extends Controller
         }
 
         return redirect()
-            ->route('portal.login', ['email' => $validated['email']])
+            ->route('portal.login', ['portal_request' => $request->session()->get('portal.authorization.request_id', 'direct'), 'email' => $validated['email']])
             ->with('portal.notice', 'Account confirmed. You can now sign in.');
     }
 
     public function resendRegistrationConfirmation(Request $request): RedirectResponse
     {
+        $this->capturePortalContext($request);
         $validated = $request->validate([
             'username' => ['required', 'string'],
             'email' => ['required', 'email'],
@@ -176,7 +245,7 @@ class AuthPortalController extends Controller
         }
 
         return redirect()
-            ->route('portal.register.confirm', ['email' => $validated['email'], 'username' => $validated['username']])
+            ->route('portal.register.confirm', ['portal_request' => $request->session()->get('portal.authorization.request_id', 'direct'), 'email' => $validated['email'], 'username' => $validated['username']])
             ->with('portal.notice', 'A new confirmation code has been sent.');
     }
 
@@ -184,7 +253,7 @@ class AuthPortalController extends Controller
     {
         $this->capturePortalContext($request);
         $validated = $request->validate([
-            'email' => ['required', 'email'],
+            'email' => ['required', 'string', 'max:128'],
         ]);
 
         try {
@@ -196,16 +265,17 @@ class AuthPortalController extends Controller
         }
 
         return redirect()
-            ->route('portal.password.reset', ['email' => $validated['email']])
+            ->route('portal.password.reset', ['portal_request' => $request->session()->get('portal.authorization.request_id', 'direct'), 'email' => $validated['email']])
             ->with('portal.notice', 'A password reset code has been sent.');
     }
 
     public function storeResetPassword(Request $request): RedirectResponse
     {
+        $this->capturePortalContext($request);
         $validated = $request->validate([
-            'email' => ['required', 'email'],
+            'email' => ['required', 'string', 'max:128'],
             'code' => ['required', 'string'],
-            'password' => ['required', 'string', 'confirmed'],
+            'password' => ['required', 'string', 'confirmed', 'max:256'],
         ]);
 
         try {
@@ -217,21 +287,18 @@ class AuthPortalController extends Controller
         }
 
         return redirect()
-            ->route('portal.login', ['email' => $validated['email']])
+            ->route('portal.login', ['portal_request' => $request->session()->get('portal.authorization.request_id', 'direct'), 'email' => $validated['email']])
             ->with('portal.notice', 'Password updated successfully. Please sign in.');
     }
 
     public function logout(Request $request): RedirectResponse
     {
+        $url = $this->broker->logoutUrl($request);
         $this->identity->logout($request->session()->get('auth.tokens.access_token'));
-        $request->session()->forget('auth.status');
-        $request->session()->forget('auth.tokens');
-        $request->session()->forget('portal.context');
-        $request->session()->forget('portal.social_auth');
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
 
-        return redirect()
-            ->route('portal.home')
-            ->with('portal.notice', 'Signed out successfully.');
+        return $url ? redirect()->away($url) : redirect()->route('portal.home')->with('portal.notice', 'Signed out successfully.');
     }
 
     public function redirectToSocialProvider(Request $request, string $provider): RedirectResponse
@@ -250,6 +317,10 @@ class AuthPortalController extends Controller
             'provider' => $socialLogin['provider'],
             'state' => $socialLogin['state'],
             'context' => $context,
+            'authorization' => $request->session()->get('portal.authorization'),
+            'nonce' => $socialLogin['nonce'],
+            'verifier' => $socialLogin['verifier'],
+            'expires_at' => time() + config('sso.state_ttl_seconds'),
         ]);
 
         return redirect()->away($socialLogin['url']);
@@ -257,27 +328,23 @@ class AuthPortalController extends Controller
 
     public function handleSocialCallback(Request $request): RedirectResponse
     {
-        $socialAuth = $request->session()->get('portal.social_auth');
+        $socialAuth = $request->session()->pull('portal.social_auth');
         $context = is_array($socialAuth['context'] ?? null)
             ? $socialAuth['context']
             : $request->session()->get('portal.context', []);
-
-        if ($request->filled('error')) {
-            $message = $request->query('error_description') ?: $request->query('error') ?: 'Social sign-in failed.';
-
-            return redirect()
-                ->route('portal.login', array_filter($context))
-                ->with('portal.error', is_string($message) ? $message : 'Social sign-in failed.');
-        }
 
         $expectedState = is_string($socialAuth['state'] ?? null) ? $socialAuth['state'] : null;
         $returnedState = $request->query('state');
         $code = $request->query('code');
 
-        if (! is_string($expectedState) || ! is_string($returnedState) || ! hash_equals($expectedState, $returnedState)) {
+        if (($socialAuth['expires_at'] ?? 0) <= time() || ! is_string($expectedState) || ! is_string($returnedState) || ! hash_equals($expectedState, $returnedState)) {
             return redirect()
                 ->route('portal.login', array_filter($context))
                 ->with('portal.error', 'The social sign-in request could not be verified. Please try again.');
+        }
+
+        if ($request->filled('error')) {
+            return redirect()->route('portal.login', array_filter($context))->with('portal.error', 'Social sign-in was cancelled or could not be completed. Please try again.');
         }
 
         if (! is_string($code) || $code === '') {
@@ -287,52 +354,28 @@ class AuthPortalController extends Controller
         }
 
         try {
-            $result = $this->identity->exchangeAuthorizationCode($code, $context);
+            $result = $this->identity->exchangeAuthorizationCode($code, $context, $socialAuth);
         } catch (RuntimeException $exception) {
             return redirect()
                 ->route('portal.login', array_filter($context))
                 ->with('portal.error', $exception->getMessage());
         }
 
-        $request->session()->forget('portal.social_auth');
-        $request->session()->put('auth.status', [
-            'authenticated' => true,
-            'user' => $result['user'],
-        ]);
-        $request->session()->put('auth.tokens', $result['tokens']);
+        $request->session()->put('portal.authorization', $socialAuth['authorization'] ?? null);
 
-        try {
-            $returnUrl = $this->identity->buildReturnUrl($context, $result['user']);
-        } catch (RuntimeException $exception) {
-            return redirect()
-                ->route('portal.home')
-                ->with('portal.error', $exception->getMessage());
-        }
-
-        if ($returnUrl) {
-            return redirect()->away($returnUrl);
-        }
-
-        return redirect()
-            ->route('portal.home')
-            ->with('portal.notice', sprintf(
-                'Signed in with %s successfully. No origin app was provided, so you remain on the auth portal.',
-                $socialAuth['provider'] ?? 'the selected provider'
-            ));
+        return $this->acceptAuthentication($request, $result);
     }
 
     private function capturePortalContext(Request $request): array
     {
-        $context = [
-            'consumer' => $request->input('consumer') ?: $request->query('consumer') ?: $request->session()->get('portal.context.consumer'),
-            'redirect_to' => $request->input('redirect_to') ?: $request->query('redirect_to') ?: $request->session()->get('portal.context.redirect_to'),
-            'origin' => $request->input('origin') ?: $request->query('origin') ?: $request->session()->get('portal.context.origin'),
-            'mode' => $request->input('mode') ?: $request->query('mode') ?: $request->session()->get('portal.context.mode'),
+        $authorization = $this->broker->capture($request);
+        $consumer = $authorization['consumer'] ?? null;
+
+        return [
+            'portal_request' => $authorization['request_id'] ?? 'direct',
+            'consumer' => $consumer,
+            'application_name' => $consumer ? config("sso.consumers.{$consumer}.label") : null,
         ];
-
-        $request->session()->put('portal.context', $context);
-
-        return $context;
     }
 
     private function renderPage(Request $request, string $page, ?array $authStatus = null): View
@@ -345,6 +388,7 @@ class AuthPortalController extends Controller
                 'user' => null,
             ]),
             'socialProviders' => $this->identity->socialProviders(),
+            'applications' => array_filter(config('sso.consumers', []), fn ($app) => ! empty($app['base_url'])),
         ]);
     }
 

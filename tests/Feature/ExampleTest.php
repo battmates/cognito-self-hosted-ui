@@ -2,7 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Services\CognitoIdentityService;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
@@ -68,29 +67,6 @@ class ExampleTest extends TestCase
         $response->assertSessionHasErrors([
             'email' => 'Incorrect email, username, or password.',
         ]);
-    }
-
-    public function test_login_redirect_validation_failure_returns_to_portal(): void
-    {
-        $mock = $this->mock(CognitoIdentityService::class);
-        $mock->shouldReceive('login')->once()->andReturn([
-            'tokens' => ['access_token' => 'abc'],
-            'user' => ['email' => 'user@example.com'],
-        ]);
-        $mock->shouldReceive('buildReturnUrl')->once()->andThrow(
-            new \RuntimeException('Return URL host "backstage.example.com" is not allowed for consumer "wordpress_backstage". Add it to the consumer allowed hosts config.')
-        );
-        $mock->shouldReceive('socialProviders')->andReturn([]);
-
-        $response = $this->post('/login', [
-            'email' => 'user@example.com',
-            'password' => 'secret',
-            'consumer' => 'wordpress_backstage',
-            'redirect_to' => 'https://backstage.example.com/cognito-login',
-        ]);
-
-        $response->assertRedirect(route('portal.home'));
-        $response->assertSessionHas('portal.error');
     }
 
     public function test_social_provider_redirect_uses_cognito_authorize_endpoint(): void

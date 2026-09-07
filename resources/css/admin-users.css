@@ -1,0 +1,49 @@
+#admin-search-results .dt-container {
+    color: var(--portal-text);
+}
+
+#admin-search-results table.dataTable {
+    width: 100%;
+    margin: 0;
+    border-collapse: collapse;
+    color: var(--portal-muted);
+}
+
+#admin-search-results table.dataTable > thead > tr > th,
+#admin-search-results table.dataTable > tbody > tr > td {
+    border-color: var(--portal-divider);
+    text-align: left;
+    vertical-align: middle;
+}
+
+#admin-search-results table.dataTable > thead > tr > th {
+    padding: 0 1.25rem 0.75rem 0;
+    color: var(--portal-heading);
+}
+
+#admin-search-results table.dataTable > tbody > tr > td {
+    padding: 1rem 1.25rem 1rem 0;
+    border-bottom: 1px solid var(--portal-divider);
+    background: transparent;
+    box-shadow: none;
+}
+
+#admin-search-results table.dataTable > tbody > tr > td:last-child {
+    padding-right: 0;
+    text-align: right;
+}
+
+#admin-search-results table.dataTable > tbody > tr > td.dt-empty {
+    padding: 1.5rem 0;
+    text-align: center;
+}
+
+#admin-search-results table.dataTable .dt-column-order {
+    color: var(--portal-muted);
+}
+
+#admin-search-results table.dataTable .dt-column-order:focus-visible {
+    outline: 2px solid #3da7c7;
+    outline-offset: 3px;
+    border-radius: 0.25rem;
+}

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Exceptions\CognitoException;
 use Firebase\JWT\JWK;
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
@@ -14,13 +15,15 @@ class CognitoIdentityService
 {
     public function __construct(
         private readonly HttpFactory $http,
-    ) {
-    }
+    ) {}
 
     public function login(string $username, string $password, array $context = []): array
     {
+        if (config('migration.enabled')) {
+            $username = app(LegacyMigrationService::class)->resolve($username, $password);
+        }
         $payload = $this->call('InitiateAuth', [
-            'AuthFlow' => env('COGNITO_AUTH_FLOW', 'USER_PASSWORD_AUTH'),
+            'AuthFlow' => config('services.cognito.auth_flow', 'USER_PASSWORD_AUTH'),
             'ClientId' => config('services.cognito.client_id'),
             'AuthParameters' => array_filter([
                 'USERNAME' => $username,
@@ -29,29 +32,89 @@ class CognitoIdentityService
             ]),
         ]);
 
-        if (! empty($payload['ChallengeName'])) {
-            throw new RuntimeException(sprintf('Cognito challenge "%s" is not implemented yet.', $payload['ChallengeName']));
+        return $this->authenticationResult($payload, $context, $username);
+    }
+
+    public function respondToChallenge(array $challenge, array $input, array $context): array
+    {
+        $name = $challenge['name'];
+        $field = match ($name) {
+            'SMS_MFA' => 'SMS_MFA_CODE',
+            'SOFTWARE_TOKEN_MFA' => 'SOFTWARE_TOKEN_MFA_CODE',
+            'EMAIL_OTP' => 'EMAIL_OTP_CODE',
+            'NEW_PASSWORD_REQUIRED' => 'NEW_PASSWORD',
+            default => throw new RuntimeException('This account needs an authentication step that is not yet supported. Please contact support.'),
+        };
+        $responses = array_filter(['USERNAME' => $challenge['username'], 'SECRET_HASH' => $this->secretHash($challenge['username'])]);
+        $responses[$field] = $name === 'NEW_PASSWORD_REQUIRED' ? $input['password'] : $input['code'];
+        if ($name === 'NEW_PASSWORD_REQUIRED') {
+            foreach ($challenge['required_attributes'] ?? [] as $attribute) {
+                if (! in_array($attribute, ['given_name', 'family_name', 'email'], true) || empty($input[$attribute])) {
+                    throw new RuntimeException('Please complete all required account details.');
+                }
+                $responses['userAttributes.'.$attribute] = $input[$attribute];
+            }
         }
 
-        $result = $payload['AuthenticationResult'] ?? null;
-        if (! is_array($result) || empty($result['IdToken'])) {
+        return $this->authenticationResult($this->call('RespondToAuthChallenge', [
+            'ClientId' => config('services.cognito.client_id'), 'ChallengeName' => $name,
+            'Session' => $challenge['session'], 'ChallengeResponses' => $responses,
+        ]), $context, $challenge['username']);
+    }
+
+    private function authenticationResult(array $payload, array $context, string $username): array
+    {
+        if (! empty($payload['ChallengeName'])) {
+            if (! in_array($payload['ChallengeName'], ['SMS_MFA', 'SOFTWARE_TOKEN_MFA', 'EMAIL_OTP', 'NEW_PASSWORD_REQUIRED'], true)) {
+                throw new RuntimeException('This account needs an authentication step that is not yet supported. Please contact support.');
+            }
+            $required = json_decode($payload['ChallengeParameters']['requiredAttributes'] ?? '[]', true) ?: [];
+
+            return ['challenge' => [
+                'name' => $payload['ChallengeName'], 'session' => $payload['Session'],
+                'username' => $payload['ChallengeParameters']['USER_ID_FOR_SRP'] ?? $payload['ChallengeParameters']['USERNAME'] ?? $username,
+                'required_attributes' => array_map(fn ($value) => str_replace('userAttributes.', '', $value), $required),
+                'expires_at' => time() + 180,
+            ]];
+        }
+        $result = $payload['AuthenticationResult'] ?? [];
+
+        return $this->sessionResult([
+            'id_token' => $result['IdToken'] ?? '', 'access_token' => $result['AccessToken'] ?? '',
+            'refresh_token' => $result['RefreshToken'] ?? null, 'expires_in' => $result['ExpiresIn'] ?? 0,
+            'token_type' => $result['TokenType'] ?? 'Bearer',
+        ], $context);
+    }
+
+    private function sessionResult(array $tokens, array $context): array
+    {
+        $claims = $this->validateIdToken($tokens['id_token']);
+        if (empty($tokens['access_token']) || empty($claims['exp']) || empty($claims['sub'])) {
             throw new RuntimeException('Cognito did not return a usable sign-in response.');
         }
+        $tokens['expires_at'] = min((int) $claims['exp'], time() + (int) $tokens['expires_in']);
+        $tokens['client_id'] = $claims['aud'];
+        $tokens['refresh_username'] = $claims['cognito:username'] ?? $claims['sub'];
 
-        $tokens = [
-            'id_token' => $result['IdToken'],
-            'access_token' => $result['AccessToken'] ?? null,
-            'refresh_token' => $result['RefreshToken'] ?? null,
-            'expires_in' => $result['ExpiresIn'] ?? null,
-            'token_type' => $result['TokenType'] ?? null,
-        ];
+        return ['tokens' => $tokens, 'user' => $this->buildSessionUser($claims, $context)];
+    }
 
-        $claims = $this->validateIdToken($tokens['id_token']);
+    public function refresh(array $tokens): array
+    {
+        if (empty($tokens['refresh_token']) || empty($tokens['refresh_username'])) {
+            throw new RuntimeException('Please sign in again.');
+        }
+        $payload = $this->call('InitiateAuth', [
+            'AuthFlow' => 'REFRESH_TOKEN_AUTH', 'ClientId' => config('services.cognito.client_id'),
+            'AuthParameters' => array_filter([
+                'REFRESH_TOKEN' => $tokens['refresh_token'],
+                'SECRET_HASH' => $this->secretHash($tokens['refresh_username']),
+            ]),
+        ]);
+        $result = $this->authenticationResult($payload, [], $tokens['refresh_username']);
+        $result['tokens']['refresh_token'] = $result['tokens']['refresh_token'] ?? $tokens['refresh_token'];
 
-        return [
-            'tokens' => $tokens,
-            'user' => $this->buildSessionUser($claims, $context),
-        ];
+        return $result;
     }
 
     public function socialProviders(): array
@@ -60,6 +123,7 @@ class CognitoIdentityService
 
         return array_values(array_filter($providers, function ($provider): bool {
             return is_array($provider)
+                && ($provider['enabled'] ?? false)
                 && is_string($provider['slug'] ?? null)
                 && is_string($provider['label'] ?? null)
                 && is_string($provider['identity_provider'] ?? null);
@@ -75,7 +139,7 @@ class CognitoIdentityService
             throw new RuntimeException('That social sign-in provider is not available.');
         }
 
-        $domain = rtrim((string) config('services.cognito.domain'), '/');
+        $domain = $this->domain();
         $clientId = (string) config('services.cognito.client_id');
         $redirectUri = (string) config('services.cognito.redirect_uri');
 
@@ -83,12 +147,9 @@ class CognitoIdentityService
             throw new RuntimeException('Cognito social sign-in is not configured correctly.');
         }
 
-        $state = $this->encodeState([
-            'nonce' => bin2hex(random_bytes(16)),
-            'provider' => $provider['slug'],
-            'context' => $context,
-            'issued_at' => now()->timestamp,
-        ]);
+        $state = bin2hex(random_bytes(32));
+        $nonce = bin2hex(random_bytes(32));
+        $verifier = bin2hex(random_bytes(32));
 
         $url = $domain.'/oauth2/authorize?'.http_build_query([
             'identity_provider' => $provider['identity_provider'],
@@ -97,18 +158,23 @@ class CognitoIdentityService
             'client_id' => $clientId,
             'scope' => implode(' ', config('services.cognito.scopes', ['openid', 'email', 'profile'])),
             'state' => $state,
+            'nonce' => $nonce,
+            'code_challenge' => rtrim(strtr(base64_encode(hash('sha256', $verifier, true)), '+/', '-_'), '='),
+            'code_challenge_method' => 'S256',
         ]);
 
         return [
             'provider' => $provider['label'],
+            'nonce' => $nonce,
+            'verifier' => $verifier,
             'state' => $state,
             'url' => $url,
         ];
     }
 
-    public function exchangeAuthorizationCode(string $code, array $context = []): array
+    public function exchangeAuthorizationCode(string $code, array $context = [], array $social = []): array
     {
-        $domain = rtrim((string) config('services.cognito.domain'), '/');
+        $domain = $this->domain();
         $clientId = (string) config('services.cognito.client_id');
         $redirectUri = (string) config('services.cognito.redirect_uri');
 
@@ -121,6 +187,7 @@ class CognitoIdentityService
             'client_id' => $clientId,
             'redirect_uri' => $redirectUri,
             'code' => $code,
+            'code_verifier' => $social['verifier'] ?? '',
         ];
 
         $clientSecret = config('services.cognito.client_secret');
@@ -129,6 +196,7 @@ class CognitoIdentityService
         }
 
         $response = $this->http
+            ->timeout(15)->connectTimeout(5)
             ->asForm()
             ->acceptJson()
             ->post($domain.'/oauth2/token', $payload);
@@ -155,11 +223,11 @@ class CognitoIdentityService
         ];
 
         $claims = $this->validateIdToken($tokens['id_token']);
+        if (empty($social['nonce']) || ! hash_equals($social['nonce'], (string) ($claims['nonce'] ?? ''))) {
+            throw new RuntimeException('The social sign-in response could not be verified.');
+        }
 
-        return [
-            'tokens' => $tokens,
-            'user' => $this->buildSessionUser($claims, $context),
-        ];
+        return $this->sessionResult($tokens, $context);
     }
 
     public function register(array $input): array
@@ -234,7 +302,7 @@ class CognitoIdentityService
             $this->call('GlobalSignOut', [
                 'AccessToken' => $accessToken,
             ]);
-        } catch (RuntimeException) {
+        } catch (\Throwable) {
             // Local logout should still succeed if Cognito global sign-out fails.
         }
     }
@@ -258,6 +326,7 @@ class CognitoIdentityService
         $lastName = Arr::get($claims, $claimMap['last_name'] ?? 'family_name');
 
         return [
+            'username' => $claims['cognito:username'] ?? null,
             'subject' => Arr::get($claims, $claimMap['subject'] ?? 'sub'),
             'email' => Arr::get($claims, $claimMap['email'] ?? 'email'),
             'first_name' => $firstName,
@@ -265,6 +334,7 @@ class CognitoIdentityService
             'name' => trim(implode(' ', array_filter([$firstName, $lastName]))) ?: Arr::get($claims, 'name'),
             'user_role' => Arr::get($claims, 'custom:user_role'),
             'roles' => array_values(array_unique($roles)),
+            'is_admin' => collect(config('sso.admin_role_attributes'))->contains(fn ($name) => in_array(strtolower(trim((string) ($claims[$name] ?? ''))), config('sso.management_roles'), true)),
             'consumer' => $context['consumer'] ?? null,
             'origin' => $context['origin'] ?? null,
             'redirect_to' => $context['redirect_to'] ?? null,
@@ -272,40 +342,10 @@ class CognitoIdentityService
         ];
     }
 
-    public function buildReturnUrl(array $context, array $user): ?string
-    {
-        $redirectTo = $context['redirect_to'] ?? null;
-        if (! is_string($redirectTo) || $redirectTo === '') {
-            return null;
-        }
-
-        $consumer = $context['consumer'] ?? null;
-        $allowedHosts = config("sso.consumers.{$consumer}.allowed_return_hosts", []);
-        $baseUrlHost = parse_url((string) config("sso.consumers.{$consumer}.base_url"), PHP_URL_HOST);
-        if (is_string($baseUrlHost) && $baseUrlHost !== '' && ! in_array($baseUrlHost, $allowedHosts, true)) {
-            $allowedHosts[] = $baseUrlHost;
-        }
-        $host = parse_url($redirectTo, PHP_URL_HOST);
-
-        if (! is_string($host) || ! in_array($host, $allowedHosts, true)) {
-            throw new RuntimeException(sprintf(
-                'Return URL host "%s" is not allowed for consumer "%s". Add it to the consumer allowed hosts config.',
-                is_string($host) ? $host : 'unknown',
-                is_string($consumer) ? $consumer : 'unknown'
-            ));
-        }
-
-        $separator = str_contains($redirectTo, '?') ? '&' : '?';
-
-        return $redirectTo.$separator.http_build_query([
-            'sso_token' => $this->buildHandoffToken($user, $context),
-            'sso_source' => config('app.url'),
-        ]);
-    }
-
     private function call(string $target, array $payload): array
     {
         $response = $this->http
+            ->timeout(15)->connectTimeout(5)
             ->acceptJson()
             ->withHeaders([
                 'Content-Type' => 'application/x-amz-json-1.1',
@@ -314,10 +354,10 @@ class CognitoIdentityService
             ->post(sprintf('https://cognito-idp.%s.amazonaws.com/', config('services.cognito.region')), $payload);
 
         if ($response->failed()) {
-            $errorType = (string) $response->header('x-amzn-errortype', '');
+            $errorType = (string) ($response->header('x-amzn-errortype') ?: $response->json('__type') ?: '');
             $message = $response->json('message') ?: 'Cognito request failed.';
 
-            throw new RuntimeException($this->mapErrorMessage($errorType, is_string($message) ? $message : 'Cognito request failed.'));
+            throw new CognitoException($errorType, $this->mapErrorMessage($errorType, 'Sign-in service is unavailable. Please try again.'));
         }
 
         $json = $response->json();
@@ -355,13 +395,21 @@ class CognitoIdentityService
         }
 
         $keys = JWK::parseKeySet($this->getJwks());
+        if (! isset($keys[$kid])) {
+            Cache::forget($this->jwksCacheKey());
+            $keys = JWK::parseKeySet($this->getJwks());
+        }
         $key = $keys[$kid] ?? null;
 
         if (! $key instanceof Key) {
             throw new RuntimeException('Unable to match Cognito signing key.');
         }
 
-        $claims = (array) JWT::decode($idToken, $key);
+        try {
+            $claims = (array) JWT::decode($idToken, $key);
+        } catch (\Throwable) {
+            throw new RuntimeException('The sign-in token could not be verified. Please sign in again.');
+        }
         $issuer = sprintf(
             'https://cognito-idp.%s.amazonaws.com/%s',
             config('services.cognito.region'),
@@ -385,8 +433,9 @@ class CognitoIdentityService
 
     private function getJwks(): array
     {
-        return Cache::remember('cognito.jwks', now()->addHours(6), function (): array {
+        return Cache::remember($this->jwksCacheKey(), now()->addHours(6), function (): array {
             $payload = $this->http
+                ->timeout(15)->connectTimeout(5)
                 ->acceptJson()
                 ->get(sprintf(
                     'https://cognito-idp.%s.amazonaws.com/%s/.well-known/jwks.json',
@@ -404,22 +453,16 @@ class CognitoIdentityService
         });
     }
 
-    private function buildHandoffToken(array $user, array $context): string
+    private function jwksCacheKey(): string
     {
-        $secret = (string) (config('app.key') ?: config('app.name'));
-
-        return JWT::encode([
-            'iss' => config('app.url'),
-            'aud' => $context['consumer'] ?? 'direct',
-            'iat' => now()->timestamp,
-            'exp' => now()->addMinutes(5)->timestamp,
-            'user' => $user,
-        ], $secret, 'HS256');
+        return 'cognito.jwks.'.config('services.cognito.region').'.'.config('services.cognito.user_pool_id');
     }
 
-    private function encodeState(array $payload): string
+    private function domain(): string
     {
-        return rtrim(strtr(base64_encode(json_encode($payload, JSON_THROW_ON_ERROR)), '+/', '-_'), '=');
+        $domain = rtrim((string) config('services.cognito.domain'), '/');
+
+        return $domain === '' ? '' : 'https://'.preg_replace('#^https?://#', '', $domain);
     }
 
     private function secretHash(string $username): ?string

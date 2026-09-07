@@ -1,0 +1,14 @@
+.email-chart {
+    min-height: 390px;
+}
+
+.email-chart .apexcharts-menu,
+.email-chart .apexcharts-tooltip {
+    background: var(--portal-card-bg);
+    border-color: var(--portal-card-border);
+    color: var(--portal-text);
+}
+
+.email-chart .apexcharts-menu-item:hover {
+    background: var(--portal-input-bg);
+}

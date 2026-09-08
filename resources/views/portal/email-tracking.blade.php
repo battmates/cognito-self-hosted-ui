@@ -5,7 +5,7 @@
     <div class="flex flex-wrap items-end justify-between gap-5">
         <div>
             <h1 class="portal-title text-4xl">Email tracking</h1>
-            <p class="portal-copy mt-3">Live Amazon SES deliverability metrics for Cognito email.</p>
+            <p class="portal-copy mt-3">Amazon SES deliverability metrics for Cognito email.</p>
         </div>
         <form method="GET" action="{{ route('portal.admin.email-tracking') }}">
             <label class="portal-label block">Date range

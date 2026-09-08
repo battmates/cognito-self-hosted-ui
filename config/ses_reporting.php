@@ -5,4 +5,5 @@ return [
     'configuration_set' => env('SES_REPORTING_CONFIGURATION_SET'),
     'from_address' => env('SES_REPORTING_FROM_ADDRESS'),
     'cache_seconds' => 300,
+    'sns_topic_arn' => env('SES_REPORTING_SNS_TOPIC_ARN'),
 ];

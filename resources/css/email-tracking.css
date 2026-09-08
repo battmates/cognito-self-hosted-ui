@@ -12,3 +12,10 @@
 .email-chart .apexcharts-menu-item:hover {
     background: var(--portal-input-bg);
 }
+
+#email-events-results .dt-container,
+#email-events-results table.dataTable { color: var(--portal-text); }
+#email-events-results table.dataTable > thead > tr > th,
+#email-events-results table.dataTable > tbody > tr > td { border-color: var(--portal-divider); text-align: left; vertical-align: middle; }
+#email-events-results table.dataTable > thead > tr > th { color: var(--portal-heading); }
+#email-events-results table.dataTable > tbody > tr > td { background: transparent; box-shadow: none; }

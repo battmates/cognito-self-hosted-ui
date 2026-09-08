@@ -16,7 +16,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->trimStrings(except: ['state', 'code', 'code_verifier', 'code_challenge', 'client_secret', 'client_id', 'redirect_uri', 'logout_uri']);
         $middleware->convertEmptyStringsToNull(except: [fn (Request $request) => $request->has('state')]);
-        $middleware->validateCsrfTokens(except: ['oauth2/token']);
+        $middleware->validateCsrfTokens(except: ['oauth2/token', 'webhooks/ses-events']);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->dontFlash(['password', 'password_confirmation', 'current_password', 'code', 'client_secret', 'code_verifier']);

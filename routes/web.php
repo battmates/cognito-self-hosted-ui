@@ -4,11 +4,13 @@ use App\Http\Controllers\AdminUsersController;
 use App\Http\Controllers\AuthPortalController;
 use App\Http\Controllers\EmailTrackingController;
 use App\Http\Controllers\OAuthController;
+use App\Http\Controllers\SesWebhookController;
 use App\Http\Middleware\PortalSession;
 use App\Http\Middleware\RequirePortalAdmin;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/oauth2/token', [OAuthController::class, 'token'])->middleware('throttle:60,1');
+Route::post('/webhooks/ses-events', [SesWebhookController::class, 'handle'])->middleware('throttle:120,1')->name('portal.webhooks.ses-events');
 
 Route::middleware(PortalSession::class)->group(function () {
 
@@ -41,4 +43,5 @@ Route::middleware([PortalSession::class, RequirePortalAdmin::class])->group(func
     Route::get('/admin/users', [AdminUsersController::class, 'index'])->middleware('throttle:120,1')->name('portal.admin.users');
     Route::post('/admin/users', [AdminUsersController::class, 'update'])->middleware('throttle:10,1')->name('portal.admin.users.update');
     Route::get('/admin/email-tracking', [EmailTrackingController::class, 'index'])->middleware('throttle:30,1')->name('portal.admin.email-tracking');
+    Route::get('/admin/email-events', [EmailTrackingController::class, 'events'])->middleware('throttle:60,1')->name('portal.admin.email-events');
 });

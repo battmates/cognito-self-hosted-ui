@@ -38,7 +38,7 @@ class EmailTrackingTest extends TestCase
         $this->withSession($this->managementSession())->get('/admin/email-tracking')->assertForbidden();
     }
 
-    public function test_tracking_page_renders_live_charts_and_no_exported_message_table(): void
+    public function test_tracking_page_renders_live_charts_and_message_event_table(): void
     {
         $this->allowManagementAccess();
         $this->mock(SesMetrics::class, function ($mock) {
@@ -56,8 +56,8 @@ class EmailTrackingTest extends TestCase
         $this->withSession($this->managementSession())->get('/admin/email-tracking?days=7')
             ->assertOk()->assertHeader('Cache-Control', 'no-store, private')
             ->assertSee('Email tracking')->assertSee('Volume over time')->assertSee('Rate over time')
-            ->assertSee('Message activity')->assertSee('does not show exported snapshots')
-            ->assertDontSee('<table', false);
+            ->assertSee('Message activity')->assertSee('Incoming SES status events')
+            ->assertSee('email-events-table');
     }
 
     public function test_tracking_range_is_restricted_to_supported_values(): void

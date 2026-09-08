@@ -1,4 +1,6 @@
 import ApexCharts from 'apexcharts';
+import DataTable from 'datatables.net-dt';
+import 'datatables.net-dt/css/dataTables.dataTables.css';
 import '../css/email-tracking.css';
 
 const dataNode = document.getElementById('email-tracking-data');
@@ -53,4 +55,13 @@ if (dataNode) {
         volume.updateOptions(options, false, false);
         rate.updateOptions(options, false, false);
     }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+    const eventTable = document.getElementById('email-events-table');
+    if (eventTable) new DataTable(eventTable, {
+        processing: true, serverSide: true, pageLength: 25, order: [[4, 'desc']],
+        ajax: { url: eventTable.dataset.eventsUrl, cache: false },
+        columns: [{ data: 0 }, { data: 1 }, { data: 2 }, { data: 3 }, { data: 4 }],
+        columnDefs: [{ targets: 4, render: (value, type, row) => type === 'sort' ? row[5] : value }],
+        language: { emptyTable: report.eventTopicReady ? 'No SES email events have arrived yet.' : 'SES event publishing is not configured yet.', zeroRecords: 'No matching email events.' },
+    });
 }

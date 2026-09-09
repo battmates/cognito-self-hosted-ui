@@ -27,3 +27,6 @@
 
 .email-event-detail-button { border-radius: .75rem; background: #3da7c7; color: #fff; font-size: .875rem; font-weight: 700; padding: .5rem .75rem; white-space: nowrap; }
 .email-event-detail-button:hover { background: #298ba9; }
+
+#email-event-detail-dialog { inset: 0; margin: auto; max-height: calc(100dvh - 2rem); width: min(42rem, calc(100vw - 2rem)); }
+#email-event-detail-dialog > div { max-height: calc(100dvh - 2rem); overflow-y: auto; }

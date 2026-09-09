@@ -31,8 +31,8 @@
     <body class="portal-body min-h-screen antialiased">
         <div class="flex min-h-screen flex-col">
             @if ($sessionUser)
-                <header class="portal-header flex h-16 items-center justify-between gap-4 border-b px-5 lg:px-8">
-                    <details class="relative"><summary class="flex cursor-pointer list-none items-center gap-3">
+                <header class="portal-header relative z-30 flex h-16 items-center justify-between gap-4 border-b px-5 lg:px-8">
+                    <details class="relative z-40 ml-auto"><summary class="flex cursor-pointer list-none items-center gap-3">
                         <div class="portal-avatar relative flex h-11 w-11 items-center justify-center overflow-hidden rounded-full text-sm font-bold">
                             @if ($gravatarUrl)
                                 <img
@@ -48,7 +48,7 @@
                             <div class="portal-header-title font-semibold">{{ $displayName ?: 'Authenticated user' }}</div>
                             <div class="portal-header-subtitle">{{ $displayRole ?: 'Signed in' }}</div>
                         </div>
-                    </summary><div class="portal-card absolute right-0 z-20 mt-3 w-52 rounded-xl border p-3 shadow-lg"><button aria-label="Toggle dark mode" class="theme-toggle flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left font-semibold" type="button"><span class="theme-toggle__icon" aria-hidden="true"></span><span class="theme-toggle__label">Dark mode</span></button><a class="block w-full rounded-lg px-3 py-2 font-semibold" href="{{ route('portal.logout') }}">Sign out</a></div></details>
+                    </summary><div class="portal-card absolute right-0 z-50 mt-3 w-52 rounded-xl border p-3 shadow-lg"><button aria-label="Toggle dark mode" class="theme-toggle flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left font-semibold" type="button"><span class="theme-toggle__icon" aria-hidden="true"></span><span class="theme-toggle__label">Dark mode</span></button><a class="block w-full rounded-lg px-3 py-2 font-semibold" href="{{ route('portal.logout') }}">Sign out</a></div></details>
                 </header>
             @endif
 

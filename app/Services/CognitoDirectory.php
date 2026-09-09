@@ -148,6 +148,53 @@ class CognitoDirectory
         }
     }
 
+    public function updateAttributes(string $username, array $attributes, string $actorRole): void
+    {
+        $this->assertWritesEnabled();
+        $allowed = ['email', 'given_name', 'family_name', 'phone_number', 'custom:user_role'];
+        $attributes = array_filter($attributes, fn ($value, $name) => in_array($name, $allowed, true) && is_string($value), ARRAY_FILTER_USE_BOTH);
+        $this->assertRoleAuthority($actorRole, $attributes['custom:user_role'] ?? null);
+        $this->call('adminUpdateUserAttributes', ['UserPoolId' => config('services.cognito.user_pool_id'), 'Username' => $username,
+            'UserAttributes' => collect($attributes)->map(fn ($value, $name) => ['Name' => $name, 'Value' => $value])->values()->all()]);
+    }
+
+    public function createUser(array $input, string $actorRole): void
+    {
+        $this->assertWritesEnabled();
+        $this->assertRoleAuthority($actorRole, $input['role'] ?? null);
+        $attributes = collect(['email' => $input['email'], 'given_name' => $input['given_name'] ?? null, 'family_name' => $input['family_name'] ?? null,
+            'phone_number' => $input['phone_number'] ?? null, 'custom:user_role' => $input['role'] ?? null])->filter(fn ($value) => is_string($value) && $value !== '')
+            ->map(fn ($value, $name) => ['Name' => $name, 'Value' => $value])->values()->all();
+        $this->call('adminCreateUser', ['UserPoolId' => config('services.cognito.user_pool_id'), 'Username' => $input['username'], 'TemporaryPassword' => $input['password'],
+            'MessageAction' => 'SUPPRESS', 'UserAttributes' => $attributes]);
+        if (! ($input['temporary'] ?? false)) {
+            $this->call('adminSetUserPassword', ['UserPoolId' => config('services.cognito.user_pool_id'), 'Username' => $input['username'], 'Password' => $input['password'], 'Permanent' => true]);
+        }
+    }
+
+    private function assertWritesEnabled(): void
+    {
+        if (! config('sso.management_writes_enabled')) {
+            throw new RuntimeException('User management is currently read-only. Writes must be enabled by the portal operator.');
+        }
+    }
+
+    private function assertRoleAuthority(string $actorRole, ?string $assignedRole): void
+    {
+        if (in_array(strtolower(trim((string) $assignedRole)), ['admin', 'administrator'], true) && ! in_array(strtolower(trim($actorRole)), ['admin', 'administrator'], true)) {
+            throw new RuntimeException('Only an administrator can assign an admin or administrator role.');
+        }
+    }
+
+    private function call(string $operation, array $parameters): void
+    {
+        try {
+            $this->client->$operation($parameters);
+        } catch (AwsException $e) {
+            throw new RuntimeException($e->getAwsErrorCode() === 'AccessDeniedException' ? 'The portal’s AWS credentials do not allow this action.' : 'The user update could not be completed. Refresh the user and try again.');
+        }
+    }
+
     public function provision(array $identity, string $password): string
     {
         if (! config('migration.enabled') || ! config('sso.management_writes_enabled')) {

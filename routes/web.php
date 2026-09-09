@@ -42,6 +42,8 @@ Route::middleware(PortalSession::class)->group(function () {
 Route::middleware([PortalSession::class, RequirePortalAdmin::class])->group(function () {
     Route::get('/admin/users', [AdminUsersController::class, 'index'])->middleware('throttle:120,1')->name('portal.admin.users');
     Route::post('/admin/users', [AdminUsersController::class, 'update'])->middleware('throttle:10,1')->name('portal.admin.users.update');
+    Route::post('/admin/users/create', [AdminUsersController::class, 'create'])->middleware('throttle:10,1')->name('portal.admin.users.create');
+    Route::post('/admin/users/attributes', [AdminUsersController::class, 'attributes'])->middleware('throttle:10,1')->name('portal.admin.users.attributes');
     Route::get('/admin/email-tracking', [EmailTrackingController::class, 'index'])->middleware('throttle:30,1')->name('portal.admin.email-tracking');
     Route::get('/admin/email-events', [EmailTrackingController::class, 'events'])->middleware('throttle:60,1')->name('portal.admin.email-events');
 });

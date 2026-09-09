@@ -95,4 +95,31 @@ class AdminUsersController extends Controller
 
         return redirect()->route('portal.admin.users', [...$listContext, 'username' => $input['username']])->with('portal.notice', 'User updated successfully.');
     }
+
+    public function create(Request $request, CognitoDirectory $directory)
+    {
+        $input = $request->validate(['username' => ['required', 'string', 'max:128'], 'email' => ['required', 'email', 'max:320'],
+            'given_name' => ['nullable', 'string', 'max:128'], 'family_name' => ['nullable', 'string', 'max:128'], 'phone_number' => ['nullable', 'string', 'max:32'],
+            'role' => ['nullable', 'string', 'max:128'], 'password' => ['required', 'string', 'confirmed', 'max:256'], 'temporary' => ['nullable', 'boolean']]);
+        try {
+            $directory->createUser($input, (string) $request->session()->get('auth.status.user.user_role'));
+        } catch (RuntimeException $e) {
+            throw ValidationException::withMessages(['create' => $e->getMessage()]);
+        }
+
+        return redirect()->route('portal.admin.users', ['username' => $input['username']])->with('portal.notice', 'User created successfully.');
+    }
+
+    public function attributes(Request $request, CognitoDirectory $directory)
+    {
+        $input = $request->validate(['username' => ['required', 'string', 'max:128'], 'email' => ['nullable', 'email', 'max:320'],
+            'given_name' => ['nullable', 'string', 'max:128'], 'family_name' => ['nullable', 'string', 'max:128'], 'phone_number' => ['nullable', 'string', 'max:32'], 'role' => ['nullable', 'string', 'max:128']]);
+        try {
+            $directory->updateAttributes($input['username'], ['email' => $input['email'] ?? '', 'given_name' => $input['given_name'] ?? '', 'family_name' => $input['family_name'] ?? '', 'phone_number' => $input['phone_number'] ?? '', 'custom:user_role' => $input['role'] ?? ''], (string) $request->session()->get('auth.status.user.user_role'));
+        } catch (RuntimeException $e) {
+            throw ValidationException::withMessages(['attributes' => $e->getMessage()]);
+        }
+
+        return back()->with('portal.notice', 'User attributes updated successfully.');
+    }
 }

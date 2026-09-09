@@ -16,7 +16,7 @@
     },
     "dependencies": {
         "apexcharts": "4.7.0",
-        "datatables.net-dt": "3.0.3",
+        "datatables.net-dt": "^2.3.8",
         "datatables.net-responsive-dt": "^3.0.4"
     }
 }

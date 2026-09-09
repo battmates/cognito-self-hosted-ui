@@ -302,6 +302,60 @@ class AuthPortalController extends Controller
         return $url ? redirect()->away($url) : redirect()->route('portal.home')->with('portal.notice', 'Signed out successfully.');
     }
 
+    public function profile(Request $request): View|RedirectResponse
+    {
+        if (! $request->session()->get('auth.status.authenticated')) {
+            return redirect()->route('portal.login');
+        }
+
+        return view('portal.profile', ['authStatus' => $request->session()->get('auth.status')]);
+    }
+
+    public function updateProfile(Request $request): RedirectResponse
+    {
+        $this->ensureAuthenticated($request);
+        $input = $request->validate([
+            'given_name' => ['required', 'string', 'max:128'],
+            'family_name' => ['required', 'string', 'max:128'],
+        ]);
+
+        try {
+            $this->identity->updateOwnProfile((string) $request->session()->get('auth.tokens.access_token'), $input);
+        } catch (RuntimeException $exception) {
+            throw ValidationException::withMessages(['profile' => $exception->getMessage()]);
+        }
+
+        $user = $request->session()->get('auth.status.user', []);
+        $user['first_name'] = $input['given_name'];
+        $user['last_name'] = $input['family_name'];
+        $user['name'] = trim($input['given_name'].' '.$input['family_name']);
+        $request->session()->put('auth.status.user', $user);
+
+        return redirect()->route('portal.profile')->with('portal.notice', 'Profile updated successfully.');
+    }
+
+    public function updatePassword(Request $request): RedirectResponse
+    {
+        $this->ensureAuthenticated($request);
+        $input = $request->validate([
+            'current_password' => ['required', 'string', 'max:256'],
+            'password' => ['required', 'string', 'confirmed', 'max:256'],
+        ]);
+
+        try {
+            $this->identity->changeOwnPassword((string) $request->session()->get('auth.tokens.access_token'), $input['current_password'], $input['password']);
+        } catch (RuntimeException $exception) {
+            throw ValidationException::withMessages(['password' => $exception->getMessage()]);
+        }
+
+        return redirect()->route('portal.profile')->with('portal.notice', 'Password changed successfully.');
+    }
+
+    private function ensureAuthenticated(Request $request): void
+    {
+        abort_unless($request->session()->get('auth.status.authenticated') && is_string($request->session()->get('auth.tokens.access_token')), 403);
+    }
+
     public function redirectToSocialProvider(Request $request, string $provider): RedirectResponse
     {
         $context = $this->capturePortalContext($request);

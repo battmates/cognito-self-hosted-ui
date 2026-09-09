@@ -48,7 +48,7 @@
                             <div class="portal-header-title font-semibold">{{ $displayName ?: 'Authenticated user' }}</div>
                             <div class="portal-header-subtitle">{{ $displayRole ?: 'Signed in' }}</div>
                         </div>
-                    </summary><div class="portal-card absolute right-0 z-50 mt-3 w-52 rounded-xl border p-3 shadow-lg"><button aria-label="Toggle dark mode" class="theme-toggle flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left font-semibold" type="button"><span class="theme-toggle__icon" aria-hidden="true"></span><span class="theme-toggle__label">Dark mode</span></button><a class="block w-full rounded-lg px-3 py-2 font-semibold" href="{{ route('portal.logout') }}">Sign out</a></div></details>
+                    </summary><div class="portal-card absolute right-0 z-50 mt-3 w-52 rounded-xl border p-3 shadow-lg"><button aria-label="Toggle dark mode" class="theme-toggle flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left font-semibold" type="button"><span class="theme-toggle__icon" aria-hidden="true"></span><span class="theme-toggle__label">Dark mode</span></button><a class="block w-full rounded-lg px-3 py-2 font-semibold" href="{{ route('portal.profile') }}">Edit profile</a><a class="block w-full rounded-lg px-3 py-2 font-semibold" href="{{ route('portal.logout') }}">Sign out</a></div></details>
                 </header>
             @endif
 

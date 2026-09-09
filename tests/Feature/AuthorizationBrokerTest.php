@@ -165,7 +165,7 @@ class AuthorizationBrokerTest extends TestCase
     public function test_direct_dashboard_has_app_links_and_no_old_referral(): void
     {
         $this->get('/login?'.http_build_query($this->params()));
-        $this->withSession($this->auth())->get('/')->assertOk()->assertSee('Your account')->assertSee('https://staging.guestlist.rockschool.io', false)->assertSessionMissing('portal.authorization');
+        $this->withSession($this->auth())->get('/')->assertOk()->assertSee('Edit profile')->assertSee('https://staging.guestlist.rockschool.io', false)->assertSessionMissing('portal.authorization');
     }
 
     public function test_session_tokens_for_another_client_cannot_be_handed_off(): void

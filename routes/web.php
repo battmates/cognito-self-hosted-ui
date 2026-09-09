@@ -31,6 +31,9 @@ Route::middleware(PortalSession::class)->group(function () {
     Route::get('/reset-password', [AuthPortalController::class, 'resetPassword'])->name('portal.password.reset');
     Route::post('/reset-password', [AuthPortalController::class, 'storeResetPassword'])->middleware('throttle:6,1')->name('portal.password.reset.store');
     Route::get('/logout', [AuthPortalController::class, 'logout'])->name('portal.logout');
+    Route::get('/profile', [AuthPortalController::class, 'profile'])->name('portal.profile');
+    Route::put('/profile', [AuthPortalController::class, 'updateProfile'])->middleware('throttle:10,1')->name('portal.profile.update');
+    Route::put('/profile/password', [AuthPortalController::class, 'updatePassword'])->middleware('throttle:6,1')->name('portal.profile.password');
 
     Route::get('/oauth2/authorize', [AuthPortalController::class, 'login']);
     Route::get('/callback', [AuthPortalController::class, 'handleSocialCallback']);

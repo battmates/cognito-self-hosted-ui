@@ -307,6 +307,26 @@ class CognitoIdentityService
         }
     }
 
+    public function updateOwnProfile(string $accessToken, array $input): void
+    {
+        $this->call('UpdateUserAttributes', [
+            'AccessToken' => $accessToken,
+            'UserAttributes' => [
+                ['Name' => 'given_name', 'Value' => $input['given_name']],
+                ['Name' => 'family_name', 'Value' => $input['family_name']],
+            ],
+        ]);
+    }
+
+    public function changeOwnPassword(string $accessToken, string $currentPassword, string $password): void
+    {
+        $this->call('ChangePassword', [
+            'AccessToken' => $accessToken,
+            'PreviousPassword' => $currentPassword,
+            'ProposedPassword' => $password,
+        ]);
+    }
+
     public function buildSessionUser(array $claims, array $context = []): array
     {
         $claimMap = config('sso.claim_map', []);

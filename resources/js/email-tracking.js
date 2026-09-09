@@ -64,13 +64,13 @@ if (dataNode) {
         const badge = value => `<span class="ses-event-status ses-event-status--${value.toLowerCase().replace(/[^a-z]+/g, '-')}">${value}</span>`;
         const table = new DataTable(eventTable, {
         processing: true, serverSide: true, pageLength: 25, order: [[4, 'desc']], autoWidth: false,
-        responsive: { details: { type: 'column', target: 0 } },
+        responsive: { details: { type: 'inline' } },
         ajax: { url: eventTable.dataset.eventsUrl, cache: false, data: data => { data.event_type = eventType.value; } },
         columns: [{ data: 0 }, { data: 1 }, { data: 2, render: (value, type) => type === 'display' ? badge(value) : value }, { data: 3 }, { data: 4 }],
         columnDefs: [
-            { targets: 0, className: 'dtr-control', responsivePriority: 1 },
-            { targets: 1, responsivePriority: 2 },
-            { targets: 2, responsivePriority: 1 },
+            { targets: 0, responsivePriority: 1 },
+            { targets: 1, responsivePriority: 3 },
+            { targets: 2, responsivePriority: 2 },
             { targets: [3, 4], responsivePriority: 10 },
             { targets: 4, render: (value, type, row) => type === 'sort' ? row[5] : value },
         ],

@@ -21,11 +21,11 @@ import '../css/admin-users.css';
         searching: false,
         info: false,
         autoWidth: false,
-        responsive: { details: { type: 'column', target: 0 } },
+        responsive: { details: { type: 'inline' } },
         order: [],
         layout: { topStart: null, topEnd: null, bottomStart: null, bottomEnd: null },
         columnDefs: [
-            { targets: 0, className: 'dtr-control', responsivePriority: 1 },
+            { targets: 0, responsivePriority: 1 },
             { targets: 1, responsivePriority: 2 },
             { targets: [2, 3, 4], responsivePriority: 10 },
             { targets: 5, orderable: false, searchable: false, responsivePriority: 1 },
@@ -100,6 +100,7 @@ import '../css/admin-users.css';
                 });
                 // Use DataTables' API so sorting and its internal row cache stay in sync.
                 table.rows.add(newRows).draw(false);
+                table.responsive.recalc();
                 updateCursor(data.cursor);
                 if (!append) history.replaceState({}, '', url);
                 describeResults(data.cursor);

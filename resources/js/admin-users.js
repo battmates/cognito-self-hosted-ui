@@ -1,5 +1,7 @@
 import DataTable from 'datatables.net-dt';
 import 'datatables.net-dt/css/dataTables.dataTables.css';
+import 'datatables.net-responsive-dt';
+import 'datatables.net-responsive-dt/css/responsive.dataTables.css';
 import '../css/admin-users.css';
 
 (() => {
@@ -19,9 +21,15 @@ import '../css/admin-users.css';
         searching: false,
         info: false,
         autoWidth: false,
+        responsive: { details: { type: 'column', target: 0 } },
         order: [],
         layout: { topStart: null, topEnd: null, bottomStart: null, bottomEnd: null },
-        columnDefs: [{ targets: 5, orderable: false, searchable: false }],
+        columnDefs: [
+            { targets: 0, className: 'dtr-control', responsivePriority: 1 },
+            { targets: 1, responsivePriority: 2 },
+            { targets: [2, 3, 4], responsivePriority: 10 },
+            { targets: 5, orderable: false, searchable: false, responsivePriority: 1 },
+        ],
         language: { emptyTable: 'No accounts loaded.' },
     });
 

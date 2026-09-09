@@ -57,7 +57,7 @@
         <label class="portal-label mt-5 block max-w-xs">Status
             <select id="email-event-type" class="portal-input mt-2 block w-full rounded-xl border px-4 py-3"><option value="">All statuses</option>@foreach($eventTypes as $eventType)<option value="{{ $eventType }}">{{ $eventType }}</option>@endforeach</select>
         </label>
-        <div class="mt-5 overflow-x-auto" id="email-events-results"><table class="w-full" id="email-events-table" data-events-url="{{ route('portal.admin.email-events') }}"><thead><tr><th>Recipient</th><th>Subject</th><th>Status</th><th>Detail</th><th>Event time</th></tr></thead><tbody></tbody></table></div>
+        <div class="mt-5" id="email-events-results"><table class="w-full" id="email-events-table" data-events-url="{{ route('portal.admin.email-events') }}"><thead><tr><th>Recipient</th><th>Subject</th><th>Status</th><th>Detail</th><th>Event time</th></tr></thead><tbody></tbody></table></div>
     </section>
 </main>
 <script id="email-tracking-data" type="application/json">@json($chartData)</script>

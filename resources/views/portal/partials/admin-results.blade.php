@@ -1,5 +1,5 @@
-<section class="portal-card rounded-xl border p-5 overflow-x-auto">
-    <table data-users-table class="w-full min-w-[860px] text-left portal-copy">
+<section class="portal-card rounded-xl border p-5">
+    <table data-users-table class="w-full text-left portal-copy">
         <thead><tr class="border-b portal-divider">
             @foreach(['User name', 'Email address', 'Email verified', 'Confirmation status', 'Status'] as $heading)
                 <th class="pb-3 pr-5 last:pr-0 whitespace-nowrap" scope="col">{{ $heading }}</th>

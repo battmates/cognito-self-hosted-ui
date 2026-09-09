@@ -61,21 +61,69 @@ if (dataNode) {
     const eventTable = document.getElementById('email-events-table');
     if (eventTable) {
         const eventType = document.getElementById('email-event-type');
+        const search = document.getElementById('email-event-search');
+        const loadMore = document.getElementById('email-events-load-more');
+        const dialog = document.getElementById('email-event-detail-dialog');
         const badge = value => `<span class="ses-event-status ses-event-status--${value.toLowerCase().replace(/[^a-z]+/g, '-')}">${value}</span>`;
+        const pageSize = 25;
+        let offset = 0;
+        let controller;
+        let searchTimer;
         const table = new DataTable(eventTable, {
-        processing: true, serverSide: true, pageLength: 25, order: [[4, 'desc']], autoWidth: false,
+        paging: false, searching: false, info: false, order: [[3, 'desc']], autoWidth: false,
         responsive: { details: { type: 'inline' } },
-        ajax: { url: eventTable.dataset.eventsUrl, cache: false, data: data => { data.event_type = eventType.value; } },
-        columns: [{ data: 0 }, { data: 1 }, { data: 2, render: (value, type) => type === 'display' ? badge(value) : value }, { data: 3 }, { data: 4 }],
+        columns: [{ data: 0 }, { data: 1 }, { data: 2, render: (value, type) => type === 'display' ? badge(value) : value }, { data: 3 }, {
+            data: null, orderable: false, searchable: false, render: (value, type) => type === 'display' ? '<button type="button" class="email-event-detail-button">View detail</button>' : '',
+        }],
         columnDefs: [
             { targets: 0, responsivePriority: 1 },
             { targets: 1, responsivePriority: 3 },
             { targets: 2, responsivePriority: 2 },
-            { targets: [3, 4], responsivePriority: 10 },
-            { targets: 4, render: (value, type, row) => type === 'sort' ? row[5] : value },
+            { targets: 3, render: (value, type, row) => type === 'sort' ? row[4] : value, responsivePriority: 10 },
+            { targets: 4, responsivePriority: 1 },
         ],
         language: { emptyTable: report.eventTopicReady ? 'No SES email events have arrived yet.' : 'SES event publishing is not configured yet.', zeroRecords: 'No matching email events.' },
         });
-        eventType.addEventListener('change', () => table.ajax.reload());
+        const loadEvents = async (replace = false) => {
+            controller?.abort();
+            controller = new AbortController();
+            if (replace) { offset = 0; table.clear().draw(); }
+            loadMore.disabled = true;
+            const [orderColumn, orderDirection] = table.order()[0] || [3, 'desc'];
+            const url = new URL(eventTable.dataset.eventsUrl, window.location.origin);
+            url.search = new URLSearchParams({ start: String(offset), length: String(pageSize), event_type: eventType.value,
+                'search[value]': search.value, 'order[0][column]': String(orderColumn), 'order[0][dir]': orderDirection });
+            try {
+                const response = await fetch(url, { headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin', cache: 'no-store', signal: controller.signal });
+                if (!response.ok) throw new Error('Email events are unavailable. Please try again.');
+                const data = await response.json();
+                table.rows.add(data.data).draw(false);
+                offset += data.data.length;
+                loadMore.hidden = !data.hasMore;
+            } catch (error) {
+                if (error.name !== 'AbortError') loadMore.hidden = true;
+            } finally { loadMore.disabled = false; }
+        };
+        eventType.addEventListener('change', () => loadEvents(true));
+        search.addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => loadEvents(true), 300); });
+        loadMore.addEventListener('click', () => loadEvents());
+        table.on('order.dt', () => loadEvents(true));
+        eventTable.addEventListener('click', event => {
+            const button = event.target.closest('.email-event-detail-button');
+            if (!button) return;
+            const row = table.row(button.closest('tr')).data();
+            if (!row) return;
+            dialog.querySelector('[data-detail-recipient]').textContent = row[0];
+            dialog.querySelector('[data-detail-subject]').textContent = row[1];
+            dialog.querySelector('[data-detail-status]').textContent = row[2];
+            dialog.querySelector('[data-detail-time]').textContent = row[3];
+            dialog.querySelector('[data-detail-message]').textContent = row[5];
+            dialog.querySelector('[data-detail-source]').textContent = row[6];
+            dialog.querySelector('[data-detail-ses-message-id]').textContent = row[7];
+            dialog.querySelector('[data-detail-sns-message-id]').textContent = row[8];
+            dialog.showModal();
+        });
+        dialog.querySelector('[data-close-email-detail]').addEventListener('click', () => dialog.close());
+        loadEvents(true);
     }
 }

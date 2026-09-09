@@ -51,15 +51,17 @@ class EmailTrackingController extends Controller
             $query->where('event_type', $input['event_type']);
         }
         $filtered = (clone $query)->count();
-        $columns = ['recipient', 'subject', 'event_type', 'detail', 'occurred_at'];
+        $columns = ['recipient', 'subject', 'event_type', 'occurred_at'];
         $column = $columns[(int) data_get($input, 'order.0.column', 4)] ?? 'occurred_at';
         $rows = $query->orderBy($column, data_get($input, 'order.0.dir', 'desc'))->orderByDesc('id')
             ->offset((int) ($input['start'] ?? 0))->limit((int) ($input['length'] ?? 25))->get();
 
         return response()->json([
             'draw' => (int) ($input['draw'] ?? 0), 'recordsTotal' => $total, 'recordsFiltered' => $filtered,
-            'data' => $rows->map(fn (SesEmailEvent $event) => [e($event->recipient), e($event->subject ?? '—'), $event->event_type, e($event->detail ?? '—'),
-                $event->occurred_at->format('j M Y, H:i:s').' UTC', $event->occurred_at->toIso8601String()])->all(),
+            'hasMore' => ((int) ($input['start'] ?? 0) + $rows->count()) < $filtered,
+            'data' => $rows->map(fn (SesEmailEvent $event) => [e($event->recipient), e($event->subject ?? '—'), $event->event_type,
+                $event->occurred_at->format('j M Y, H:i:s').' UTC', $event->occurred_at->toIso8601String(), $event->detail ?? '—',
+                $event->source ?? '—', $event->ses_message_id, $event->sns_message_id])->all(),
         ])->header('Cache-Control', 'no-store, private');
     }
 }

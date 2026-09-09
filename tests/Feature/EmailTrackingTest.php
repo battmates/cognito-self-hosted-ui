@@ -57,7 +57,8 @@ class EmailTrackingTest extends TestCase
             ->assertOk()->assertHeader('Cache-Control', 'no-store, private')
             ->assertSee('Email tracking')->assertSee('Volume over time')->assertSee('Rate over time')
             ->assertSee('Message activity')->assertSee('Incoming SES status events')
-            ->assertSee('email-events-table');
+            ->assertSee('email-events-table')->assertSee('email-events-load-more')
+            ->assertSee('Email event detail')->assertSee('data-detail-ses-message-id');
     }
 
     public function test_tracking_range_is_restricted_to_supported_values(): void

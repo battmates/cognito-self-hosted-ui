@@ -54,12 +54,22 @@
     <section class="portal-card rounded-xl border p-6">
         <h2 class="portal-heading text-2xl">Message activity</h2>
         <p class="portal-copy mt-3">Incoming SES status events appear here after event publishing is activated. Each row is a status update for an email, so delivery and bounce history remains visible.</p>
-        <label class="portal-label mt-5 block max-w-xs">Status
+        <div class="mt-5 flex flex-wrap gap-4">
+        <label class="portal-label block min-w-52 max-w-xs">Status
             <select id="email-event-type" class="portal-input mt-2 block w-full rounded-xl border px-4 py-3"><option value="">All statuses</option>@foreach($eventTypes as $eventType)<option value="{{ $eventType }}">{{ $eventType }}</option>@endforeach</select>
         </label>
-        <div class="mt-5" id="email-events-results"><table class="w-full" id="email-events-table" data-events-url="{{ route('portal.admin.email-events') }}"><thead><tr><th>Recipient</th><th>Subject</th><th>Status</th><th>Detail</th><th>Event time</th></tr></thead><tbody></tbody></table></div>
+        <label class="portal-label block min-w-52 max-w-sm">Search
+            <input id="email-event-search" type="search" class="portal-input mt-2 block w-full rounded-xl border px-4 py-3" placeholder="Email address, status, or message ID">
+        </label>
+        </div>
+        <div class="mt-5" id="email-events-results"><table class="w-full" id="email-events-table" data-events-url="{{ route('portal.admin.email-events') }}"><thead><tr><th>Recipient</th><th>Subject</th><th>Status</th><th>Event time</th><th>Actions</th></tr></thead><tbody></tbody></table></div>
+        <button id="email-events-load-more" type="button" class="mt-5 rounded-xl bg-[#3da7c7] px-6 py-3 font-semibold text-white" hidden>Load more</button>
     </section>
 </main>
+<dialog id="email-event-detail-dialog" class="portal-card max-w-2xl rounded-xl border p-0 text-left backdrop:bg-black/50">
+    <div class="p-6"><div class="flex items-start justify-between gap-4"><h2 class="portal-heading text-2xl">Email event detail</h2><button type="button" data-close-email-detail class="portal-copy font-semibold">Close</button></div>
+    <dl class="portal-copy mt-6 space-y-4"><div><dt class="portal-heading font-semibold">Recipient</dt><dd data-detail-recipient class="mt-1 break-all"></dd></div><div><dt class="portal-heading font-semibold">Subject</dt><dd data-detail-subject class="mt-1"></dd></div><div><dt class="portal-heading font-semibold">Status</dt><dd data-detail-status class="mt-1"></dd></div><div><dt class="portal-heading font-semibold">Event time</dt><dd data-detail-time class="mt-1"></dd></div><div><dt class="portal-heading font-semibold">From</dt><dd data-detail-source class="mt-1 break-all"></dd></div><div><dt class="portal-heading font-semibold">SES message ID</dt><dd data-detail-ses-message-id class="mt-1 break-all font-mono text-xs"></dd></div><div><dt class="portal-heading font-semibold">SNS event ID</dt><dd data-detail-sns-message-id class="mt-1 break-all font-mono text-xs"></dd></div><div><dt class="portal-heading font-semibold">Detail</dt><dd data-detail-message class="mt-1 whitespace-pre-wrap break-words"></dd></div></dl></div>
+</dialog>
 <script id="email-tracking-data" type="application/json">@json($chartData)</script>
 @vite('resources/js/email-tracking.js')
 @endsection

@@ -24,3 +24,6 @@
 .ses-event-status--send, .ses-event-status--delivery { background: #dcfce7; color: #166534; }
 .ses-event-status--bounce, .ses-event-status--complaint, .ses-event-status--reject, .ses-event-status--rendering-failure { background: #fee2e2; color: #991b1b; }
 .ses-event-status--deliverydelay { background: #fef3c7; color: #92400e; }
+
+.email-event-detail-button { border-radius: .75rem; background: #3da7c7; color: #fff; font-size: .875rem; font-weight: 700; padding: .5rem .75rem; white-space: nowrap; }
+.email-event-detail-button:hover { background: #298ba9; }

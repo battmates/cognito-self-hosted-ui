@@ -54,7 +54,10 @@
     <section class="portal-card rounded-xl border p-6">
         <h2 class="portal-heading text-2xl">Message activity</h2>
         <p class="portal-copy mt-3">Incoming SES status events appear here after event publishing is activated. Each row is a status update for an email, so delivery and bounce history remains visible.</p>
-        <div class="mt-5 overflow-x-auto" id="email-events-results"><table class="w-full" id="email-events-table" data-events-url="{{ route('portal.admin.email-events') }}"><thead><tr><th>Recipient</th><th>SES message ID</th><th>Status</th><th>Detail</th><th>Event time</th></tr></thead><tbody></tbody></table></div>
+        <label class="portal-label mt-5 block max-w-xs">Status
+            <select id="email-event-type" class="portal-input mt-2 block w-full rounded-xl border px-4 py-3"><option value="">All statuses</option>@foreach($eventTypes as $eventType)<option value="{{ $eventType }}">{{ $eventType }}</option>@endforeach</select>
+        </label>
+        <div class="mt-5 overflow-x-auto" id="email-events-results"><table class="w-full" id="email-events-table" data-events-url="{{ route('portal.admin.email-events') }}"><thead><tr><th>Recipient</th><th>Subject</th><th>Status</th><th>Detail</th><th>SES message ID</th><th>Event time</th></tr></thead><tbody></tbody></table></div>
     </section>
 </main>
 <script id="email-tracking-data" type="application/json">@json($chartData)</script>

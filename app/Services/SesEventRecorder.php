@@ -21,14 +21,16 @@ class SesEventRecorder
         }
         $occurredAt = CarbonImmutable::parse($this->timestamp($event, $mail))->utc();
         $detail = $this->detail($event, $type);
-        DB::transaction(function () use ($snsMessageId, $messageId, $recipients, $mail, $type, $occurredAt, $detail) {
+        $subject = data_get($mail, 'commonHeaders.subject');
+        $subject = is_string($subject) ? $subject : null;
+        DB::transaction(function () use ($snsMessageId, $messageId, $recipients, $mail, $type, $occurredAt, $detail, $subject) {
             foreach ($recipients as $recipient) {
                 if (! is_string($recipient) || $recipient === '') {
                     continue;
                 }
                 SesEmailEvent::query()->firstOrCreate([
                     'sns_message_id' => $snsMessageId, 'recipient' => strtolower($recipient),
-                ], ['ses_message_id' => $messageId, 'source' => $mail['source'] ?? null, 'event_type' => $type,
+                ], ['ses_message_id' => $messageId, 'subject' => $subject, 'source' => $mail['source'] ?? null, 'event_type' => $type,
                     'occurred_at' => $occurredAt, 'detail' => $detail]);
             }
         });

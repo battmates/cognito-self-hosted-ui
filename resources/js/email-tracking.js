@@ -57,11 +57,16 @@ if (dataNode) {
     }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
     const eventTable = document.getElementById('email-events-table');
-    if (eventTable) new DataTable(eventTable, {
-        processing: true, serverSide: true, pageLength: 25, order: [[4, 'desc']],
-        ajax: { url: eventTable.dataset.eventsUrl, cache: false },
-        columns: [{ data: 0 }, { data: 1 }, { data: 2 }, { data: 3 }, { data: 4 }],
-        columnDefs: [{ targets: 4, render: (value, type, row) => type === 'sort' ? row[5] : value }],
+    if (eventTable) {
+        const eventType = document.getElementById('email-event-type');
+        const badge = value => `<span class="ses-event-status ses-event-status--${value.toLowerCase().replace(/[^a-z]+/g, '-')}">${value}</span>`;
+        const table = new DataTable(eventTable, {
+        processing: true, serverSide: true, pageLength: 25, order: [[5, 'desc']],
+        ajax: { url: eventTable.dataset.eventsUrl, cache: false, data: data => { data.event_type = eventType.value; } },
+        columns: [{ data: 0 }, { data: 1 }, { data: 2, render: (value, type) => type === 'display' ? badge(value) : value }, { data: 3 }, { data: 4 }, { data: 5 }],
+        columnDefs: [{ targets: 5, render: (value, type, row) => type === 'sort' ? row[6] : value }],
         language: { emptyTable: report.eventTopicReady ? 'No SES email events have arrived yet.' : 'SES event publishing is not configured yet.', zeroRecords: 'No matching email events.' },
-    });
+        });
+        eventType.addEventListener('change', () => table.ajax.reload());
+    }
 }

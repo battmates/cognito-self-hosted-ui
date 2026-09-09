@@ -34,13 +34,12 @@
                 <header class="portal-header flex h-16 items-center justify-between gap-4 border-b px-5 lg:px-8">
                     <button
                         aria-label="Toggle dark mode"
-                        class="theme-toggle inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition"
+                        class="theme-toggle inline-flex rounded-full border p-3 transition"
                         type="button"
                     >
                         <span class="theme-toggle__icon" aria-hidden="true"></span>
-                        <span class="theme-toggle__label">Dark mode</span>
                     </button>
-                    <div class="hidden items-center gap-3 lg:flex">
+                    <details class="relative"><summary class="flex cursor-pointer list-none items-center gap-3">
                         <div class="portal-avatar relative flex h-11 w-11 items-center justify-center overflow-hidden rounded-full text-sm font-bold">
                             @if ($gravatarUrl)
                                 <img
@@ -52,11 +51,11 @@
                             @endif
                             <span class="absolute inset-0 {{ $gravatarUrl ? 'hidden' : 'flex' }} items-center justify-center">{{ $initials }}</span>
                         </div>
-                        <div class="text-sm">
+                        <div class="hidden text-sm lg:block">
                             <div class="portal-header-title font-semibold">{{ $displayName ?: 'Authenticated user' }}</div>
                             <div class="portal-header-subtitle">{{ $displayRole ?: 'Signed in' }}</div>
                         </div>
-                    </div>
+                    </summary><div class="portal-card absolute right-0 z-20 mt-3 w-48 rounded-xl border p-3 shadow-lg"><form method="POST" action="{{ route('portal.logout') }}">@csrf<button class="w-full rounded-lg px-3 py-2 text-left font-semibold">Sign out</button></form></div></details>
                 </header>
             @endif
 
@@ -65,11 +64,10 @@
                     <div class="absolute right-5 top-5 z-10 lg:right-8 lg:top-8">
                         <button
                             aria-label="Toggle dark mode"
-                            class="theme-toggle inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition"
+                            class="theme-toggle inline-flex rounded-full border p-3 transition"
                             type="button"
                         >
                             <span class="theme-toggle__icon" aria-hidden="true"></span>
-                            <span class="theme-toggle__label">Dark mode</span>
                         </button>
                     </div>
                 @endunless
@@ -93,12 +91,7 @@
                     localStorage.setItem(storageKey, theme);
 
                     buttons.forEach((button) => {
-                        const label = button.querySelector('.theme-toggle__label');
                         button.setAttribute('aria-pressed', String(theme === 'dark'));
-
-                        if (label) {
-                            label.textContent = theme === 'dark' ? 'Light mode' : 'Dark mode';
-                        }
                     });
                 };
 

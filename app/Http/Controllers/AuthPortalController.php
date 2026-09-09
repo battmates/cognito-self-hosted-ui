@@ -7,6 +7,7 @@ use App\Services\CognitoIdentityService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Illuminate\Validation\ValidationException;
 use RuntimeException;
 
@@ -388,7 +389,7 @@ class AuthPortalController extends Controller
                 'user' => null,
             ]),
             'socialProviders' => $this->identity->socialProviders(),
-            'applications' => array_filter(config('sso.consumers', []), fn ($app) => ! empty($app['base_url'])),
+            'applications' => Arr::only(config('sso.consumers', []), ['cloud', 'backstage', 'guestlist']),
         ]);
     }
 

@@ -66,10 +66,9 @@
                 <h2 id="applications-heading" class="portal-heading text-2xl">Your applications</h2>
                 <div class="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
                     @foreach ($applications as $application)
-                        <a class="portal-card rounded-xl border p-6 transition hover:border-[#3da7c7]" href="{{ $application['base_url'] }}">
-                            <h3 class="portal-heading text-2xl">{{ $application['label'] }}</h3>
-                            <p class="portal-copy mt-3">Continue to {{ $application['label'] }}</p>
-                            <span class="mt-6 inline-flex font-semibold text-[#3da7c7]">Open application <span class="ml-3" aria-hidden="true">→</span></span>
+                        <a class="portal-card rounded-xl border p-6 transition hover:border-[#3da7c7] {{ empty($application['base_url']) ? 'pointer-events-none opacity-70' : '' }}" @if(!empty($application['base_url'])) href="{{ $application['base_url'] }}" @endif>
+                            <div class="flex items-center gap-4"><span class="flex h-12 w-12 items-center justify-center rounded-xl bg-[#3da7c7] font-bold text-white">{{ $application['logo'] }}</span><h3 class="portal-heading text-2xl">{{ $application['label'] }}</h3></div>
+                            <p class="portal-copy mt-5">{{ $application['description'] }}</p>
                         </a>
                     @endforeach
                 </div>
@@ -95,11 +94,6 @@
                     </div>
                 </section>
             @endif
-            <section class="portal-card rounded-xl border p-6 flex flex-wrap items-center justify-between gap-5">
-                <div><h2 class="portal-heading text-xl">Your account</h2><p class="portal-copy mt-2">{{ $authStatus['user']['email'] ?? '' }}</p></div>
-                <form method="POST" action="{{ route('portal.logout') }}">@csrf
-                            @include('portal.partials.context-fields', ['portalContext' => $portalContext])<button class="portal-secondary-button rounded-xl border px-5 py-3 font-semibold">Sign out</button></form>
-            </section>
         @else
             <section class="mx-auto w-full">
                 @if (in_array($page, ['login', 'register'], true))

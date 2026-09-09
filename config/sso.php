@@ -15,19 +15,17 @@ return [
     // Every enabled consumer currently uses this portal's existing Cognito client.
     // Exact callback URLs, not wildcard hosts, are the authorization boundary.
     'consumers' => [
+        'cloud' => ['label' => 'RSL Cloud', 'logo' => 'RC', 'description' => "Teaching and learning resources, exams, orders and examiner tools for RSL's graded exams.", 'base_url' => env('SSO_CLOUD_URL'), 'callback_urls' => $csv(env('SSO_CLOUD_CALLBACK_URLS')), 'logout_urls' => $csv(env('SSO_CLOUD_LOGOUT_URLS'))],
+        'backstage' => [
+            'label' => 'Backstage', 'logo' => 'B', 'description' => 'Learning Management System including our RiFF library of e-books, band charts and delivery guides.',
+            'base_url' => env('SSO_BACKSTAGE_URL', 'https://staging.rockschool.io'), 'callback_urls' => $csv(env('SSO_BACKSTAGE_CALLBACK_URLS', 'https://staging.rockschool.io/cognito-login')), 'logout_urls' => $csv(env('SSO_BACKSTAGE_LOGOUT_URLS', 'https://staging.rockschool.io/logout')),
+        ],
         'guestlist' => [
-            'label' => 'Guestlist',
+            'label' => 'Guestlist', 'logo' => 'G', 'description' => 'Booking, timetabling, calendar and more for franchises, schools, tutors and customers.',
             'base_url' => env('SSO_GUESTLIST_URL', 'https://staging.guestlist.rockschool.io'),
             'callback_urls' => $csv(env('SSO_GUESTLIST_CALLBACK_URLS', 'https://staging.guestlist.rockschool.io/cognito/callback')),
             'logout_urls' => $csv(env('SSO_GUESTLIST_LOGOUT_URLS', 'https://staging.guestlist.rockschool.io/logout')),
         ],
-        'backstage' => [
-            'label' => 'Backstage',
-            'base_url' => env('SSO_BACKSTAGE_URL', 'https://staging.rockschool.io'),
-            'callback_urls' => $csv(env('SSO_BACKSTAGE_CALLBACK_URLS', 'https://staging.rockschool.io/cognito-login')),
-            'logout_urls' => $csv(env('SSO_BACKSTAGE_LOGOUT_URLS', 'https://staging.rockschool.io/logout')),
-        ],
-        'cloud' => ['label' => 'RSL Cloud', 'base_url' => env('SSO_CLOUD_URL'), 'callback_urls' => $csv(env('SSO_CLOUD_CALLBACK_URLS')), 'logout_urls' => $csv(env('SSO_CLOUD_LOGOUT_URLS'))],
         'musicteacher' => ['label' => 'MusicTeacher.com', 'base_url' => env('SSO_MUSICTEACHER_URL'), 'callback_urls' => $csv(env('SSO_MUSICTEACHER_CALLBACK_URLS')), 'logout_urls' => $csv(env('SSO_MUSICTEACHER_LOGOUT_URLS'))],
         'spotlight' => ['label' => 'Spotlight', 'base_url' => env('SSO_SPOTLIGHT_URL'), 'callback_urls' => $csv(env('SSO_SPOTLIGHT_CALLBACK_URLS')), 'logout_urls' => $csv(env('SSO_SPOTLIGHT_LOGOUT_URLS'))],
     ],

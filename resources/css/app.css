@@ -276,7 +276,7 @@ body {
 }
 
 .application-logo { display: flex; align-items: center; height: 5rem; }
-.application-logo img { max-height: 100%; max-width: 13rem; object-fit: contain; object-position: left center; }
+.application-logo img { max-height: 100%; max-width: 6rem; object-fit: contain; object-position: left center; }
 .application-logo--guestlist img { max-height: 4.75rem; }
 :root[data-theme='dark'] .application-logo--rslcloud img { content: url('/images/app-logos/rsl-cloud-dark.svg'); }
 :root[data-theme='dark'] .application-logo--backstage img { content: url('/images/app-logos/backstage-dark.svg'); }

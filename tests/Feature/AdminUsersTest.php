@@ -75,6 +75,37 @@ class AdminUsersTest extends TestCase
         $this->assertFalse($directory->isAdministrator($user));
     }
 
+    public function test_role_endpoint_returns_the_roles_discovered_from_the_pool(): void
+    {
+        $this->mock(CognitoDirectory::class, function ($mock) {
+            $mock->shouldReceive('get')->with('admin-user')->andReturn(['Enabled' => true]);
+            $mock->shouldReceive('isAdministrator')->andReturn(true);
+            $mock->shouldReceive('roles')->once()->andReturn(['administrator', 'ops_manager', 'tutor']);
+        });
+
+        $this->withSession($this->adminSession())->getJson('/admin/roles')->assertOk()
+            ->assertJson(['roles' => ['administrator', 'ops_manager', 'tutor']]);
+    }
+
+    public function test_new_role_choice_is_used_for_user_creation_and_attribute_editing(): void
+    {
+        config(['sso.management_writes_enabled' => true]);
+        $this->mock(CognitoDirectory::class, function ($mock) {
+            $mock->shouldReceive('get')->with('admin-user')->twice()->andReturn(['Enabled' => true]);
+            $mock->shouldReceive('isAdministrator')->twice()->andReturn(true);
+            $mock->shouldReceive('createUser')->once()->with(\Mockery::on(fn ($input) => $input['role'] === 'tutor' && $input['new_role'] === 'tutor'), '')->andReturnNull();
+            $mock->shouldReceive('updateAttributes')->once()->with('target', \Mockery::on(fn ($attributes) => $attributes['custom:user_role'] === 'tutor'), '')->andReturnNull();
+        });
+
+        $this->withSession($this->adminSession())->post('/admin/users/create', [
+            'username' => 'new-user', 'email' => 'new@example.test', 'password' => 'Password123!', 'password_confirmation' => 'Password123!',
+            'role' => '__new__', 'new_role' => 'tutor',
+        ])->assertRedirect(route('portal.admin.users', ['username' => 'new-user']));
+        $this->withSession($this->adminSession())->post('/admin/users/attributes', [
+            'username' => 'target', 'role' => '__new__', 'new_role' => 'tutor',
+        ])->assertSessionHas('portal.notice', 'User attributes updated successfully.');
+    }
+
     public function test_admin_action_requires_confirmation_and_self_disable_is_blocked(): void
     {
         $this->mock(CognitoDirectory::class, function ($mock) {

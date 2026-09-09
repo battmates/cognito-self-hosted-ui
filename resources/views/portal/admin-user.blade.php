@@ -29,7 +29,7 @@
     <section class="portal-card w-full rounded-xl border p-6 lg:p-8" aria-labelledby="manage-account-title">
         <form method="POST" action="{{ route('portal.admin.users.attributes') }}" class="mb-8 grid gap-4 md:grid-cols-2">@csrf<input type="hidden" name="username" value="{{ $selected['Username'] }}"><h2 class="portal-heading text-2xl md:col-span-2">Edit attributes</h2>
             @foreach(['email'=>'Email','given_name'=>'First name','family_name'=>'Last name','phone_number'=>'Phone number'] as $name=>$label)<label class="portal-label">{{ $label }}<input class="portal-input mt-2 block w-full rounded-xl border px-4 py-3" name="{{ $name }}" value="{{ $attributes[$name] ?? '' }}"></label>@endforeach
-            <label class="portal-label">Role<input class="portal-input mt-2 block w-full rounded-xl border px-4 py-3" name="role" value="{{ $attributes['custom:user_role'] ?? '' }}" list="role-options"><datalist id="role-options"><option value="ops_manager"><option value="admin"><option value="administrator"></datalist></label><button class="rounded-xl bg-[#3da7c7] px-6 py-3 font-semibold text-white" @disabled(!$writesEnabled)>Save attributes</button></form>
+            @include('portal.partials.role-picker', ['roleValue' => $attributes['custom:user_role'] ?? ''])<button class="rounded-xl bg-[#3da7c7] px-6 py-3 font-semibold text-white" @disabled(!$writesEnabled)>Save attributes</button></form>
         <form method="POST" action="{{ route('portal.admin.users.update') }}" class="space-y-5">
             @csrf
             <input type="hidden" name="username" value="{{ $selected['Username'] }}">

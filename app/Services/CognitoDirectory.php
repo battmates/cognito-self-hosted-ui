@@ -4,6 +4,7 @@ namespace App\Services;
 
 use Aws\CognitoIdentityProvider\CognitoIdentityProviderClient;
 use Aws\Exception\AwsException;
+use Illuminate\Support\Facades\Cache;
 use RuntimeException;
 
 class CognitoDirectory
@@ -74,6 +75,35 @@ class CognitoDirectory
     public function attributes(array $user): array
     {
         return array_column($user['UserAttributes'] ?? $user['Attributes'] ?? [], 'Value', 'Name');
+    }
+
+    public function roles(): array
+    {
+        $poolId = (string) config('services.cognito.user_pool_id');
+
+        return Cache::remember('cognito.directory.roles.'.sha1($poolId), now()->addMinutes(10), function () use ($poolId): array {
+            $roles = [];
+            $cursor = null;
+            do {
+                $input = ['UserPoolId' => $poolId, 'Limit' => 60];
+                if ($cursor) {
+                    $input['PaginationToken'] = $cursor;
+                }
+                $page = $this->client->listUsers($input)->toArray();
+                foreach ($page['Users'] ?? [] as $user) {
+                    $role = trim((string) ($this->attributes($user)['custom:user_role'] ?? ''));
+                    if ($role !== '') {
+                        $roles[] = $role;
+                    }
+                }
+                $cursor = $page['PaginationToken'] ?? null;
+            } while ($cursor);
+
+            $roles = array_values(array_unique($roles, SORT_STRING));
+            natcasesort($roles);
+
+            return array_values($roles);
+        });
     }
 
     public function isAdministrator(array $user): bool

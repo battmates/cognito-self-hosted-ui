@@ -43,6 +43,7 @@ Route::middleware(PortalSession::class)->group(function () {
 });
 
 Route::middleware([PortalSession::class, RequirePortalAdmin::class])->group(function () {
+    Route::get('/admin/roles', [AdminUsersController::class, 'roles'])->middleware('throttle:30,1')->name('portal.admin.roles');
     Route::get('/admin/users', [AdminUsersController::class, 'index'])->middleware('throttle:120,1')->name('portal.admin.users');
     Route::post('/admin/users', [AdminUsersController::class, 'update'])->middleware('throttle:10,1')->name('portal.admin.users.update');
     Route::post('/admin/users/create', [AdminUsersController::class, 'create'])->middleware('throttle:10,1')->name('portal.admin.users.create');

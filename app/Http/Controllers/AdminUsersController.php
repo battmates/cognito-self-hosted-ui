@@ -100,7 +100,8 @@ class AdminUsersController extends Controller
     {
         $input = $request->validate(['username' => ['required', 'string', 'max:128'], 'email' => ['required', 'email', 'max:320'],
             'given_name' => ['nullable', 'string', 'max:128'], 'family_name' => ['nullable', 'string', 'max:128'], 'phone_number' => ['nullable', 'string', 'max:32'],
-            'role' => ['nullable', 'string', 'max:128'], 'password' => ['required', 'string', 'confirmed', 'max:256'], 'temporary' => ['nullable', 'boolean']]);
+            'role' => ['nullable', 'string', 'max:128'], 'new_role' => ['nullable', 'string', 'max:128'], 'password' => ['required', 'string', 'confirmed', 'max:256'], 'temporary' => ['nullable', 'boolean']]);
+        $input['role'] = $this->selectedRole($input);
         try {
             $directory->createUser($input, (string) $request->session()->get('auth.status.user.user_role'));
         } catch (RuntimeException $e) {
@@ -113,7 +114,8 @@ class AdminUsersController extends Controller
     public function attributes(Request $request, CognitoDirectory $directory)
     {
         $input = $request->validate(['username' => ['required', 'string', 'max:128'], 'email' => ['nullable', 'email', 'max:320'],
-            'given_name' => ['nullable', 'string', 'max:128'], 'family_name' => ['nullable', 'string', 'max:128'], 'phone_number' => ['nullable', 'string', 'max:32'], 'role' => ['nullable', 'string', 'max:128']]);
+            'given_name' => ['nullable', 'string', 'max:128'], 'family_name' => ['nullable', 'string', 'max:128'], 'phone_number' => ['nullable', 'string', 'max:32'], 'role' => ['nullable', 'string', 'max:128'], 'new_role' => ['nullable', 'string', 'max:128']]);
+        $input['role'] = $this->selectedRole($input);
         try {
             $directory->updateAttributes($input['username'], ['email' => $input['email'] ?? '', 'given_name' => $input['given_name'] ?? '', 'family_name' => $input['family_name'] ?? '', 'phone_number' => $input['phone_number'] ?? '', 'custom:user_role' => $input['role'] ?? ''], (string) $request->session()->get('auth.status.user.user_role'));
         } catch (RuntimeException $e) {
@@ -121,5 +123,19 @@ class AdminUsersController extends Controller
         }
 
         return back()->with('portal.notice', 'User attributes updated successfully.');
+    }
+
+    public function roles(CognitoDirectory $directory)
+    {
+        try {
+            return response()->json(['roles' => $directory->roles()]);
+        } catch (RuntimeException) {
+            return response()->json(['message' => 'The role list is unavailable. Please try again.'], 503);
+        }
+    }
+
+    private function selectedRole(array $input): string
+    {
+        return trim((string) (($input['role'] ?? '') === '__new__' ? ($input['new_role'] ?? '') : ($input['role'] ?? '')));
     }
 }

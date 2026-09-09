@@ -110,7 +110,8 @@ if (dataNode) {
         eventTable.addEventListener('click', event => {
             const button = event.target.closest('.email-event-detail-button');
             if (!button) return;
-            const row = table.row(button.closest('tr')).data();
+            const buttonRow = button.closest('tr');
+            const row = table.row(buttonRow.classList.contains('child') ? buttonRow.previousElementSibling : buttonRow).data();
             if (!row) return;
             dialog.querySelector('[data-detail-recipient]').textContent = row[0];
             dialog.querySelector('[data-detail-subject]').textContent = row[1];

@@ -107,7 +107,6 @@ if (dataNode) {
         eventType.addEventListener('change', () => loadEvents(true));
         search.addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => loadEvents(true), 300); });
         loadMore.addEventListener('click', () => loadEvents());
-        table.on('order.dt', () => loadEvents(true));
         eventTable.addEventListener('click', event => {
             const button = event.target.closest('.email-event-detail-button');
             if (!button) return;

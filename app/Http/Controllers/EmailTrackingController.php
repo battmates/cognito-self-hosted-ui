@@ -36,7 +36,7 @@ class EmailTrackingController extends Controller
         $input = $request->validate([
             'draw' => ['nullable', 'integer', 'min:0', 'max:100000'], 'start' => ['nullable', 'integer', 'min:0', 'max:1000000'],
             'length' => ['nullable', 'integer', 'min:1', 'max:100'], 'search.value' => ['nullable', 'string', 'max:128'],
-            'event_type' => ['nullable', 'string', 'max:40'], 'order.0.column' => ['nullable', 'integer', 'min:0', 'max:5'],
+            'event_type' => ['nullable', 'string', 'max:40'], 'order.0.column' => ['nullable', 'integer', 'min:0', 'max:4'],
             'order.0.dir' => ['nullable', Rule::in(['asc', 'desc'])],
         ]);
         $query = SesEmailEvent::query();
@@ -51,15 +51,15 @@ class EmailTrackingController extends Controller
             $query->where('event_type', $input['event_type']);
         }
         $filtered = (clone $query)->count();
-        $columns = ['recipient', 'subject', 'event_type', 'detail', 'ses_message_id', 'occurred_at'];
-        $column = $columns[(int) data_get($input, 'order.0.column', 5)] ?? 'occurred_at';
+        $columns = ['recipient', 'subject', 'event_type', 'detail', 'occurred_at'];
+        $column = $columns[(int) data_get($input, 'order.0.column', 4)] ?? 'occurred_at';
         $rows = $query->orderBy($column, data_get($input, 'order.0.dir', 'desc'))->orderByDesc('id')
             ->offset((int) ($input['start'] ?? 0))->limit((int) ($input['length'] ?? 25))->get();
 
         return response()->json([
             'draw' => (int) ($input['draw'] ?? 0), 'recordsTotal' => $total, 'recordsFiltered' => $filtered,
             'data' => $rows->map(fn (SesEmailEvent $event) => [e($event->recipient), e($event->subject ?? '—'), $event->event_type, e($event->detail ?? '—'),
-                e($event->ses_message_id), $event->occurred_at->format('j M Y, H:i:s').' UTC', $event->occurred_at->toIso8601String()])->all(),
+                $event->occurred_at->format('j M Y, H:i:s').' UTC', $event->occurred_at->toIso8601String()])->all(),
         ])->header('Cache-Control', 'no-store, private');
     }
 }

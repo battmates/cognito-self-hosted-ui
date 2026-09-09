@@ -14,6 +14,7 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->trustProxies(at: '*');
         $middleware->trimStrings(except: ['state', 'code', 'code_verifier', 'code_challenge', 'client_secret', 'client_id', 'redirect_uri', 'logout_uri']);
         $middleware->convertEmptyStringsToNull(except: [fn (Request $request) => $request->has('state')]);
         $middleware->validateCsrfTokens(except: ['oauth2/token', 'webhooks/ses-events']);

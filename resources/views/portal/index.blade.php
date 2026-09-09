@@ -67,7 +67,9 @@
                 <div class="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
                     @foreach ($applications as $application)
                         <a class="portal-card rounded-xl border p-6 transition hover:border-[#3da7c7] {{ empty($application['base_url']) ? 'pointer-events-none opacity-70' : '' }}" @if(!empty($application['base_url'])) href="{{ $application['base_url'] }}" target="_blank" rel="noopener noreferrer" @endif>
-                            <div class="flex items-center gap-4"><span class="flex h-12 w-12 items-center justify-center rounded-xl bg-[#3da7c7] font-bold text-white">{{ $application['logo'] }}</span><h3 class="portal-heading text-2xl">{{ $application['label'] }}</h3></div>
+                            @php($logoKey = strtolower(str_replace([' ', '.'], ['', ''], $application['label'])))
+                            <div class="application-logo application-logo--{{ $logoKey }}"><img src="{{ asset('images/app-logos/'.match($logoKey) { 'rslcloud' => 'rsl-cloud-light.svg', 'backstage' => 'backstage-light.svg', 'guestlist' => 'guestlist.png', default => 'musicteacher.svg' }) }}" alt="{{ $application['label'] }} logo"></div>
+                            <h3 class="portal-heading mt-5 text-2xl">{{ $application['label'] }}</h3>
                             <p class="portal-copy mt-5">{{ $application['description'] }}</p>
                             <span class="mt-6 inline-flex font-semibold text-[#3da7c7]">{{ empty($application['base_url']) ? 'Coming soon' : 'Open application →' }}</span>
                         </a>

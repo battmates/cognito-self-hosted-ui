@@ -26,7 +26,7 @@ return [
             'callback_urls' => $csv(env('SSO_GUESTLIST_CALLBACK_URLS', 'https://staging.guestlist.rockschool.io/cognito/callback')),
             'logout_urls' => $csv(env('SSO_GUESTLIST_LOGOUT_URLS', 'https://staging.guestlist.rockschool.io/logout')),
         ],
-        'musicteacher' => ['label' => 'MusicTeacher.com', 'base_url' => env('SSO_MUSICTEACHER_URL'), 'callback_urls' => $csv(env('SSO_MUSICTEACHER_CALLBACK_URLS')), 'logout_urls' => $csv(env('SSO_MUSICTEACHER_LOGOUT_URLS'))],
+        'musicteacher' => ['label' => 'MusicTeacher', 'description' => 'A teacher-first registry designed to help students make confident choices and help teachers stand out with clear trust signals.', 'base_url' => env('SSO_MUSICTEACHER_URL'), 'callback_urls' => $csv(env('SSO_MUSICTEACHER_CALLBACK_URLS')), 'logout_urls' => $csv(env('SSO_MUSICTEACHER_LOGOUT_URLS'))],
         'spotlight' => ['label' => 'Spotlight', 'base_url' => env('SSO_SPOTLIGHT_URL'), 'callback_urls' => $csv(env('SSO_SPOTLIGHT_CALLBACK_URLS')), 'logout_urls' => $csv(env('SSO_SPOTLIGHT_LOGOUT_URLS'))],
     ],
     'management_roles' => ['admin', 'administrator', 'ops_manager'],

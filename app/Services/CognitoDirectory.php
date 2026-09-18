@@ -25,7 +25,7 @@ class CognitoDirectory
 
     public function search(string $field = 'email', string $query = '', ?string $cursor = null, bool $exact = false): array
     {
-        if (! in_array($field, ['email', 'username', 'given_name', 'family_name', 'sub'], true)) {
+        if (! in_array($field, ['email', 'username', 'preferred_username', 'given_name', 'family_name', 'sub'], true)) {
             throw new RuntimeException('Unsupported search field.');
         }
         $input = ['UserPoolId' => config('services.cognito.user_pool_id'), 'Limit' => 30];
@@ -123,16 +123,21 @@ class CognitoDirectory
 
     public function hasIdentity(string $identifier): bool
     {
-        if ($this->get($identifier)) {
-            return true;
+        return $this->resolveUsername($identifier) !== null;
+    }
+
+    public function resolveUsername(string $identifier): ?string
+    {
+        if ($user = $this->get($identifier)) {
+            return $user['Username'] ?? $identifier;
         }
         if (filter_var($identifier, FILTER_VALIDATE_EMAIL)) {
             $page = $this->search('email', strtolower($identifier), null, true);
-
-            return ! empty($page['Users']) || ! empty($page['PaginationToken']);
+        } else {
+            $page = $this->search('preferred_username', $identifier, null, true);
         }
 
-        return false;
+        return $page['Users'][0]['Username'] ?? null;
     }
 
     public function manage(string $username, string $action, array $input = []): void
@@ -235,15 +240,22 @@ class CognitoDirectory
             throw new RuntimeException('An account already exists. Sign in to it or contact support.');
         }
         try {
+            $attributes = [
+                ['Name' => 'email', 'Value' => $identity['email']],
+                ['Name' => 'email_verified', 'Value' => 'true'],
+            ];
+            foreach (['given_name', 'family_name'] as $name) {
+                if (($identity[$name] ?? '') !== '') {
+                    $attributes[] = ['Name' => $name, 'Value' => $identity[$name]];
+                }
+            }
+            if (($identity['preferred_username'] ?? '') !== '') {
+                $attributes[] = ['Name' => 'preferred_username', 'Value' => $identity['preferred_username']];
+            }
             $this->client->adminCreateUser([
                 'UserPoolId' => config('services.cognito.user_pool_id'), 'Username' => $identity['username'],
                 'TemporaryPassword' => $password, 'MessageAction' => 'SUPPRESS', 'ForceAliasCreation' => false,
-                'UserAttributes' => [
-                    ['Name' => 'email', 'Value' => $identity['email']],
-                    ['Name' => 'email_verified', 'Value' => 'true'],
-                    ['Name' => 'given_name', 'Value' => $identity['given_name']],
-                    ['Name' => 'family_name', 'Value' => $identity['family_name']],
-                ],
+                'UserAttributes' => $attributes,
             ]);
             $this->client->adminSetUserPassword([
                 'UserPoolId' => config('services.cognito.user_pool_id'), 'Username' => $identity['username'],

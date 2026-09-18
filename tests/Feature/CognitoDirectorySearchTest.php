@@ -74,6 +74,23 @@ class CognitoDirectorySearchTest extends TestCase
         $this->assertSame([], $directory->search('username', 'user')['Users']);
     }
 
+    public function test_identity_resolution_returns_the_canonical_cognito_username(): void
+    {
+        $client = $this->mock(CognitoIdentityProviderClient::class);
+        $client->shouldReceive('adminGetUser')->with(Mockery::on(fn ($input) => $input['Username'] === 'person@example.com'))
+            ->andReturn(new Result(['Username' => 'wp_123']));
+        $this->assertSame('wp_123', (new CognitoDirectory($client))->resolveUsername('person@example.com'));
+    }
+
+    public function test_legacy_username_resolves_through_preferred_username(): void
+    {
+        $client = $this->mock(CognitoIdentityProviderClient::class);
+        $client->shouldReceive('adminGetUser')->once()->andThrow(new AwsException('Missing', new Command('AdminGetUser'), ['code' => 'UserNotFoundException']));
+        $client->shouldReceive('listUsers')->once()->with(Mockery::on(fn ($input) => $input['Filter'] === 'preferred_username = "legacy-user"'))
+            ->andReturn(new Result(['Users' => [['Username' => 'wp_123']]]));
+        $this->assertSame('wp_123', (new CognitoDirectory($client))->resolveUsername('legacy-user'));
+    }
+
     public function test_scan_failure_does_not_return_a_misleading_partial_result(): void
     {
         $client = $this->mock(CognitoIdentityProviderClient::class);

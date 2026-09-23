@@ -92,4 +92,47 @@ class LegacyMigrationTest extends TestCase
         $this->expectExceptionMessage('An account already exists');
         $directory->provision($this->identity()['user'], 'password');
     }
+
+    public function test_password_recovery_uses_the_signed_wordpress_lookup_and_then_provisions_a_role_free_account(): void
+    {
+        config([
+            'migration.password_recovery_enabled' => true,
+            'migration.providers.wordpress' => [
+                'enabled' => true,
+                'lookup_endpoint' => 'https://wordpress.example.test/wp-json/cognito-migrate/v1/lookup',
+                'token' => 'shared-secret',
+            ],
+        ]);
+        Http::fake(function ($request) {
+            $body = '{"username":"missing@example.com"}';
+            $this->assertSame($body, $request->body());
+            $timestamp = $request->header('X-Cognito-Migrate-Timestamp')[0];
+            $this->assertMatchesRegularExpression('/^\d+$/', $timestamp);
+            $this->assertSame(hash_hmac('sha256', $timestamp.'.'.$body, 'shared-secret'), $request->header('X-Cognito-Migrate-Signature')[0]);
+
+            return Http::response(['ok' => true, 'user' => [
+                'id' => 123, 'user_login' => 'wordpress-user', 'email' => 'person@example.com', 'first_name' => 'Example', 'last_name' => 'User',
+            ]]);
+        });
+        $directory = $this->mock(CognitoDirectory::class);
+        $directory->shouldReceive('hasIdentity')->with('wordpress-user')->once()->andReturn(false);
+        $directory->shouldReceive('hasIdentity')->with('person@example.com')->once()->andReturn(false);
+        $directory->shouldReceive('provisionForPasswordRecovery')->once()->with(Mockery::on(fn ($identity) => $identity === [
+            'source' => 'wordpress', 'id' => '123', 'username' => 'wordpress-user', 'email' => 'person@example.com', 'given_name' => 'Example', 'family_name' => 'User',
+        ]))->andReturn('wordpress-user');
+
+        $this->assertSame('wordpress-user', (new LegacyMigrationService($directory))->recoverForPasswordReset('missing@example.com'));
+    }
+
+    public function test_password_recovery_returns_no_match_for_a_wordpress_lookup_not_found(): void
+    {
+        config(['migration.password_recovery_enabled' => true, 'migration.providers.wordpress' => [
+            'enabled' => true, 'lookup_endpoint' => 'https://wordpress.example.test/lookup', 'token' => 'shared-secret',
+        ]]);
+        Http::fake(['*' => Http::response(['ok' => false], 404)]);
+        $directory = $this->mock(CognitoDirectory::class);
+        $directory->shouldNotReceive('hasIdentity');
+
+        $this->assertNull((new LegacyMigrationService($directory))->recoverForPasswordReset('missing@example.com'));
+    }
 }

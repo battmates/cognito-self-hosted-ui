@@ -2,6 +2,12 @@
 
 `LEGACY_MIGRATION_ENABLED=false` keeps migrations disabled. Administrator management writes are now enabled by user request (`COGNITO_MANAGEMENT_WRITES_ENABLED=true`); this alone does not enable migrations. Enabling either provider additionally requires its HTTPS endpoint and server API token. This is a proposed adapter contract, not a claim that either legacy system already implements it.
 
+## WordPress password-recovery fallback
+
+`LEGACY_PASSWORD_RECOVERY_ENABLED=false` keeps recovery lookup disabled independently of password-based login migration. When enabled together with `MIGRATION_WORDPRESS_ENABLED=true`, a Cognito `UserNotFoundException` from the portal's forgot-password form calls the WordPress lookup endpoint before returning the normal Cognito error. The portal signs `POST /wp-json/cognito-migrate/v1/lookup` with `X-Cognito-Migrate-Timestamp` and the HMAC-SHA256 signature required by WP-Cognito, over the exact JSON body `{"username":"<entered identifier>"}`.
+
+A successful lookup creates a role-free Cognito account with a generated server-only password, then invokes Cognito's normal forgot-password operation. The reset code therefore goes only to the WordPress account's returned email and Cognito remains responsible for the final password reset. No legacy password, WordPress role, or WordPress session is transferred.
+
 The portal posts JSON with `identifier` (username or email, entered by the user) and `password`, authenticated with `Authorization: Bearer <provider token>`. The endpoint must validate the actual password through the legacy platform's supported authentication API; a user-exists response is insufficient. It must support both identifier types. Use constant-time password verification, generic failure responses and rate limits. Never log the password or authorization header.
 
 - Return 401/404 for invalid credentials/no such account.

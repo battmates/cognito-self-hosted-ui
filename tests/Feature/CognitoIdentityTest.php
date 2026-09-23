@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Services\CognitoIdentityService;
+use App\Services\LegacyMigrationService;
 use Firebase\JWT\JWT;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -37,6 +38,31 @@ class CognitoIdentityTest extends TestCase
         $this->assertTrue($result['user']['is_admin']);
         $identity->refresh($result['tokens']);
         Http::assertSent(fn ($request) => $request['AuthFlow'] === 'REFRESH_TOKEN_AUTH' && $request['AuthParameters']['SECRET_HASH'] === base64_encode(hash_hmac('sha256', 'canonical-user'.'test-client', 'test-secret', true)));
+    }
+
+    public function test_forgot_password_uses_wordpress_lookup_only_after_cognito_reports_no_user(): void
+    {
+        config(['migration.password_recovery_enabled' => true]);
+        $this->mock(LegacyMigrationService::class)->shouldReceive('recoverForPasswordReset')->once()
+            ->with('missing@example.com')->andReturn('wordpress-user');
+        Http::fakeSequence()
+            ->push(['message' => 'User does not exist.'], 400, ['x-amzn-errortype' => 'UserNotFoundException'])
+            ->push([], 200);
+
+        app(CognitoIdentityService::class)->startForgotPassword('missing@example.com');
+
+        Http::assertSentCount(2);
+        Http::assertSent(fn ($request) => $request['Username'] === 'wordpress-user'
+            && $request['AuthParameters']['SECRET_HASH'] === base64_encode(hash_hmac('sha256', 'wordpress-usertest-client', 'test-secret', true)));
+    }
+
+    public function test_forgot_password_does_not_call_legacy_lookup_for_an_existing_cognito_user_or_other_errors(): void
+    {
+        $this->mock(LegacyMigrationService::class)->shouldNotReceive('recoverForPasswordReset');
+        Http::fake(['*' => Http::response(['message' => 'Cognito is unavailable.'], 500, ['x-amzn-errortype' => 'InternalErrorException'])]);
+
+        $this->expectExceptionMessage('Sign-in service is unavailable');
+        app(CognitoIdentityService::class)->startForgotPassword('person@example.com');
     }
 
     #[DataProvider('invalidClaims')]

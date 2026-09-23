@@ -257,4 +257,36 @@ class CognitoDirectory
 
         return $identity['username'];
     }
+
+    public function provisionForPasswordRecovery(array $identity): string
+    {
+        if (! config('migration.password_recovery_enabled')) {
+            throw new RuntimeException('Legacy password recovery is disabled.');
+        }
+        if ($this->hasIdentity($identity['username']) || $this->hasIdentity($identity['email'])) {
+            throw new RuntimeException('An account already exists. Please try password recovery again.');
+        }
+        // The user proves control of the destination address by completing the
+        // Cognito reset challenge; no legacy password or role is transferred.
+        $password = bin2hex(random_bytes(32)).'Aa!';
+        try {
+            $this->client->adminCreateUser([
+                'UserPoolId' => config('services.cognito.user_pool_id'), 'Username' => $identity['username'],
+                'TemporaryPassword' => $password, 'MessageAction' => 'SUPPRESS', 'ForceAliasCreation' => false,
+                'UserAttributes' => [
+                    ['Name' => 'email', 'Value' => $identity['email']],
+                    ['Name' => 'given_name', 'Value' => $identity['given_name']],
+                    ['Name' => 'family_name', 'Value' => $identity['family_name']],
+                ],
+            ]);
+            $this->client->adminSetUserPassword([
+                'UserPoolId' => config('services.cognito.user_pool_id'), 'Username' => $identity['username'],
+                'Password' => $password, 'Permanent' => true,
+            ]);
+        } catch (AwsException) {
+            throw new RuntimeException('Legacy password recovery could not be completed. Please contact support.');
+        }
+
+        return $identity['username'];
+    }
 }

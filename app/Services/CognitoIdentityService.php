@@ -274,11 +274,18 @@ class CognitoIdentityService
 
     public function startForgotPassword(string $email): void
     {
-        $this->call('ForgotPassword', [
-            'ClientId' => config('services.cognito.client_id'),
-            'Username' => $email,
-            'SecretHash' => $this->secretHash($email),
-        ]);
+        try {
+            $this->forgotPassword($email);
+        } catch (CognitoException $exception) {
+            if (! str_contains($exception->awsType, 'UserNotFoundException')) {
+                throw $exception;
+            }
+            $username = app(LegacyMigrationService::class)->recoverForPasswordReset($email);
+            if (! $username) {
+                throw $exception;
+            }
+            $this->forgotPassword($username);
+        }
     }
 
     public function confirmForgotPassword(string $email, string $code, string $password): void
@@ -383,6 +390,15 @@ class CognitoIdentityService
         $json = $response->json();
 
         return is_array($json) ? $json : [];
+    }
+
+    private function forgotPassword(string $username): void
+    {
+        $this->call('ForgotPassword', [
+            'ClientId' => config('services.cognito.client_id'),
+            'Username' => $username,
+            'SecretHash' => $this->secretHash($username),
+        ]);
     }
 
     private function mapErrorMessage(string $errorType, string $fallback): string

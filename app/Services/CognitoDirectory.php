@@ -275,6 +275,10 @@ class CognitoDirectory
                 'TemporaryPassword' => $password, 'MessageAction' => 'SUPPRESS', 'ForceAliasCreation' => false,
                 'UserAttributes' => [
                     ['Name' => 'email', 'Value' => $identity['email']],
+                    // The lookup response is authenticated by the trusted
+                    // WordPress migration secret. Cognito needs this flag to
+                    // deliver the immediately requested recovery code.
+                    ['Name' => 'email_verified', 'Value' => 'true'],
                     ['Name' => 'given_name', 'Value' => $identity['given_name']],
                     ['Name' => 'family_name', 'Value' => $identity['family_name']],
                 ],

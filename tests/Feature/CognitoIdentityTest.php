@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Services\CognitoIdentityService;
+use App\Services\CognitoDirectory;
 use App\Services\LegacyMigrationService;
 use Firebase\JWT\JWT;
 use Illuminate\Support\Facades\Cache;
@@ -43,6 +44,7 @@ class CognitoIdentityTest extends TestCase
     public function test_forgot_password_uses_wordpress_lookup_only_after_cognito_reports_no_user(): void
     {
         config(['migration.password_recovery_enabled' => true]);
+        $this->mock(CognitoDirectory::class)->shouldReceive('hasIdentity')->once()->with('missing@example.com')->andReturn(false);
         $this->mock(LegacyMigrationService::class)->shouldReceive('recoverForPasswordReset')->once()
             ->with('missing@example.com')->andReturn('wordpress-user');
         Http::fakeSequence()

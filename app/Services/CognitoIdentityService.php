@@ -274,11 +274,29 @@ class CognitoIdentityService
 
     public function startForgotPassword(string $email): void
     {
-        $this->call('ForgotPassword', [
-            'ClientId' => config('services.cognito.client_id'),
-            'Username' => $email,
-            'SecretHash' => $this->secretHash($email),
-        ]);
+        if (! config('migration.password_recovery_enabled')) {
+            $this->forgotPassword($email);
+
+            return;
+        }
+
+        // Cognito may deliberately hide a missing account behind a generic
+        // ForgotPassword response. Check the directory first so the WordPress
+        // fallback is deterministic and never runs for a Cognito identity.
+        if (app(CognitoDirectory::class)->hasIdentity($email)) {
+            $this->forgotPassword($email);
+
+            return;
+        }
+
+        $username = app(LegacyMigrationService::class)->recoverForPasswordReset($email);
+        if ($username) {
+            $this->forgotPassword($username);
+
+            return;
+        }
+
+        $this->forgotPassword($email);
     }
 
     public function confirmForgotPassword(string $email, string $code, string $password): void
@@ -383,6 +401,15 @@ class CognitoIdentityService
         $json = $response->json();
 
         return is_array($json) ? $json : [];
+    }
+
+    private function forgotPassword(string $username): void
+    {
+        $this->call('ForgotPassword', [
+            'ClientId' => config('services.cognito.client_id'),
+            'Username' => $username,
+            'SecretHash' => $this->secretHash($username),
+        ]);
     }
 
     private function mapErrorMessage(string $errorType, string $fallback): string

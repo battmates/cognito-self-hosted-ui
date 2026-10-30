@@ -5,6 +5,7 @@ namespace App\Services;
 use Aws\CognitoIdentityProvider\CognitoIdentityProviderClient;
 use Aws\Exception\AwsException;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Str;
 use RuntimeException;
 
 class CognitoDirectory
@@ -137,6 +138,10 @@ class CognitoDirectory
             $page = $this->search('preferred_username', $identifier, null, true);
         }
 
+        if (count($page['Users'] ?? []) > 1 || ! empty($page['PaginationToken'])) {
+            throw new RuntimeException('More than one account matches this identifier. Please contact support.');
+        }
+
         return $page['Users'][0]['Username'] ?? null;
     }
 
@@ -235,38 +240,87 @@ class CognitoDirectory
         if (! config('migration.enabled') || ! config('sso.management_writes_enabled')) {
             throw new RuntimeException('Migration writes are disabled.');
         }
-        // Never adopt an existing account, even after credentials were verified elsewhere.
-        if ($this->hasIdentity($identity['username']) || $this->hasIdentity($identity['email'])) {
+
+        return $this->createMigratedUser($identity, $password, 'Account migration could not be completed. Please contact support.');
+    }
+
+    public function provisionForPasswordRecovery(array $identity): string
+    {
+        if (! config('migration.password_recovery_enabled')) {
+            throw new RuntimeException('Legacy password recovery is disabled.');
+        }
+        // The user proves control of the destination address by completing the
+        // Cognito reset challenge; no legacy password or role is transferred.
+        $password = bin2hex(random_bytes(32)).'Aa!';
+
+        return $this->createMigratedUser($identity, $password, 'Legacy password recovery could not be completed. Please contact support.');
+    }
+
+    private function createMigratedUser(array $identity, string $password, string $failureMessage): string
+    {
+        $generateUsername = (bool) filter_var($identity['username'], FILTER_VALIDATE_EMAIL);
+        // An existing email always blocks provisioning. A generated name that
+        // belongs to someone else only causes us to try the next candidate.
+        if ((! $generateUsername && $this->hasIdentity($identity['username'])) || $this->hasIdentity($identity['email'])) {
             throw new RuntimeException('An account already exists. Sign in to it or contact support.');
         }
-        try {
+        $base = $generateUsername ? $this->nameUsername($identity) : $identity['username'];
+        for ($attempt = 1; $attempt <= 100; $attempt++) {
+            $username = $base.($attempt === 1 ? '' : '_'.$attempt);
+            if ($generateUsername && $this->hasIdentity($username)) {
+                continue;
+            }
             $attributes = [
                 ['Name' => 'email', 'Value' => $identity['email']],
                 ['Name' => 'email_verified', 'Value' => 'true'],
+                ['Name' => 'given_name', 'Value' => $identity['given_name']],
+                ['Name' => 'family_name', 'Value' => $identity['family_name']],
             ];
-            foreach (['given_name', 'family_name'] as $name) {
-                if (($identity[$name] ?? '') !== '') {
-                    $attributes[] = ['Name' => $name, 'Value' => $identity[$name]];
-                }
-            }
             if (($identity['preferred_username'] ?? '') !== '') {
                 $attributes[] = ['Name' => 'preferred_username', 'Value' => $identity['preferred_username']];
             }
-            $this->client->adminCreateUser([
-                'UserPoolId' => config('services.cognito.user_pool_id'), 'Username' => $identity['username'],
-                'TemporaryPassword' => $password, 'MessageAction' => 'SUPPRESS', 'ForceAliasCreation' => false,
-                'UserAttributes' => $attributes,
-            ]);
-            $this->client->adminSetUserPassword([
-                'UserPoolId' => config('services.cognito.user_pool_id'), 'Username' => $identity['username'],
-                'Password' => $password, 'Permanent' => true,
-            ]);
-        } catch (AwsException) {
-            // Creation may have succeeded before password setting failed. Do not overwrite
-            // or delete a possibly existing account; operator reconciliation is required.
-            throw new RuntimeException('Account migration could not be completed. Please contact support.');
+            try {
+                $this->client->adminCreateUser([
+                    'UserPoolId' => config('services.cognito.user_pool_id'), 'Username' => $username,
+                    'TemporaryPassword' => $password, 'MessageAction' => 'SUPPRESS', 'ForceAliasCreation' => false,
+                    'UserAttributes' => $attributes,
+                ]);
+            } catch (AwsException $exception) {
+                // Another signup may take the name after our directory check.
+                // Retry only a username collision, never an email-alias conflict.
+                if ($generateUsername && $exception->getAwsErrorCode() === 'UsernameExistsException') {
+                    continue;
+                }
+                throw new RuntimeException($failureMessage);
+            }
+            try {
+                $this->client->adminSetUserPassword([
+                    'UserPoolId' => config('services.cognito.user_pool_id'), 'Username' => $username,
+                    'Password' => $password, 'Permanent' => true,
+                ]);
+            } catch (AwsException) {
+                // Creation succeeded. Never retry, overwrite or delete this
+                // account if setting its password fails; operator review is needed.
+                throw new RuntimeException($failureMessage);
+            }
+
+            return $username;
         }
 
-        return $identity['username'];
+        throw new RuntimeException('A unique username could not be created. Please contact support.');
+    }
+
+    private function nameUsername(array $identity): string
+    {
+        $parts = [];
+        foreach (['given_name', 'family_name'] as $attribute) {
+            $part = preg_replace('/[^a-z0-9]/', '', strtolower(Str::ascii($identity[$attribute])));
+            if ($part !== '') {
+                $parts[] = $part;
+            }
+        }
+
+        // Reserve space for numeric suffixes within Cognito's username limit.
+        return substr(implode('.', $parts) ?: 'user', 0, 120);
     }
 }

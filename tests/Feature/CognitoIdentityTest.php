@@ -2,7 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Services\CognitoDirectory;
 use App\Services\CognitoIdentityService;
+use App\Services\LegacyMigrationService;
 use Firebase\JWT\JWT;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -37,6 +39,31 @@ class CognitoIdentityTest extends TestCase
         $this->assertTrue($result['user']['is_admin']);
         $identity->refresh($result['tokens']);
         Http::assertSent(fn ($request) => $request['AuthFlow'] === 'REFRESH_TOKEN_AUTH' && $request['AuthParameters']['SECRET_HASH'] === base64_encode(hash_hmac('sha256', 'canonical-user'.'test-client', 'test-secret', true)));
+    }
+
+    public function test_forgot_password_checks_directory_before_wordpress_lookup_and_requests_reset_for_migrated_user(): void
+    {
+        config(['migration.password_recovery_enabled' => true]);
+        $this->mock(CognitoDirectory::class)->shouldReceive('hasIdentity')->once()->with('missing@example.com')->andReturn(false);
+        $this->mock(LegacyMigrationService::class)->shouldReceive('recoverForPasswordReset')->once()
+            ->with('missing@example.com')->andReturn('wordpress-user');
+        Http::fake(['*' => Http::response([], 200)]);
+
+        app(CognitoIdentityService::class)->startForgotPassword('missing@example.com');
+
+        Http::assertSentCount(1);
+        Http::assertSent(fn ($request) => $request->header('X-Amz-Target')[0] === 'AWSCognitoIdentityProviderService.ForgotPassword'
+            && $request['Username'] === 'wordpress-user'
+            && $request['SecretHash'] === base64_encode(hash_hmac('sha256', 'wordpress-usertest-client', 'test-secret', true)));
+    }
+
+    public function test_forgot_password_does_not_call_legacy_lookup_for_an_existing_cognito_user_or_other_errors(): void
+    {
+        $this->mock(LegacyMigrationService::class)->shouldNotReceive('recoverForPasswordReset');
+        Http::fake(['*' => Http::response(['message' => 'Cognito is unavailable.'], 500, ['x-amzn-errortype' => 'InternalErrorException'])]);
+
+        $this->expectExceptionMessage('Sign-in service is unavailable');
+        app(CognitoIdentityService::class)->startForgotPassword('person@example.com');
     }
 
     #[DataProvider('invalidClaims')]

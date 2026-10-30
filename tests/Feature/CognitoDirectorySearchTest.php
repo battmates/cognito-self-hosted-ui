@@ -98,4 +98,14 @@ class CognitoDirectorySearchTest extends TestCase
         $this->expectExceptionMessage('The user search could not be completed');
         (new CognitoDirectory($client))->search('email', '@domain.com');
     }
+
+    public function test_ambiguous_preferred_username_does_not_select_an_arbitrary_account(): void
+    {
+        $client = $this->mock(CognitoIdentityProviderClient::class);
+        $client->shouldReceive('adminGetUser')->once()->andThrow(new AwsException('Missing', new Command('AdminGetUser'), ['code' => 'UserNotFoundException']));
+        $client->shouldReceive('listUsers')->once()->andReturn(new Result(['Users' => [['Username' => 'wp_123'], ['Username' => 'wp_456']]]));
+        $this->expectExceptionMessage('More than one account matches this identifier.');
+
+        (new CognitoDirectory($client))->resolveUsername('legacy-user');
+    }
 }

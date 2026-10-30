@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Services\CognitoDirectory;
 use App\Services\LegacyMigrationService;
 use Illuminate\Support\Facades\Http;
+use Mockery;
 use Tests\TestCase;
 
 class LegacyMigrationTest extends TestCase
@@ -12,7 +13,7 @@ class LegacyMigrationTest extends TestCase
     private function enable(): void
     {
         config(['migration.enabled' => true, 'sso.management_writes_enabled' => true, 'migration.providers' => [
-            'musicteacher' => ['driver' => 'wordpress_hmac', 'enabled' => true, 'endpoint' => 'https://legacy.example.com/verify', 'secret' => 'shared-secret'],
+            'wordpress' => ['driver' => 'wordpress_hmac', 'enabled' => true, 'endpoint' => 'https://legacy.example.com/verify', 'secret' => 'shared-secret'],
         ]]);
     }
 
@@ -50,7 +51,7 @@ class LegacyMigrationTest extends TestCase
         Http::fake(['https://legacy.example.com/verify' => Http::response($this->wordpressIdentity(['role' => 'administrator', 'custom:user_role' => 'admin']))]);
         $directory = $this->mock(CognitoDirectory::class);
         $directory->shouldReceive('resolveUsername')->andReturn(null);
-        $directory->shouldReceive('provision')->twice()->with(\Mockery::on(fn ($identity) => $identity['username'] === 'wp_123' && $identity['preferred_username'] === 'legacy-user' && ! isset($identity['role']) && ! isset($identity['custom:user_role'])), 'the-password')->andReturn('wp_123');
+        $directory->shouldReceive('provision')->twice()->with(Mockery::on(fn ($identity) => $identity['username'] === 'wp_123' && $identity['preferred_username'] === 'legacy-user' && ! isset($identity['role']) && ! isset($identity['custom:user_role'])), 'the-password')->andReturn('wp_123');
         $service = new LegacyMigrationService($directory);
         $this->assertSame('wp_123', $service->resolve('legacy-user', 'the-password'));
         $this->assertSame('wp_123', $service->resolve('person@example.com', 'the-password'));
@@ -66,23 +67,68 @@ class LegacyMigrationTest extends TestCase
     public function test_providers_are_checked_in_order_and_stop_after_the_first_match(): void
     {
         $this->enable();
-        config(['migration.providers.cloud' => ['driver' => 'json_bearer', 'enabled' => true, 'endpoint' => 'https://cloud.example.com/verify', 'token' => 'cloud-token']]);
+        config(['migration.providers.cloud' => ['enabled' => true, 'base_url' => 'https://cloud.example.com', 'username' => 'service-user', 'password' => 'service-password']]);
         Http::fake([
             'https://legacy.example.com/verify' => Http::response(['ok' => false], 401),
-            'https://cloud.example.com/verify' => Http::response($this->identity()),
+            'https://cloud.example.com/generate-token*' => Http::response(['Token' => 'cloud-token', 'ExpireTime' => now()->addHour()->toIso8601String()]),
+            'https://cloud.example.com/backstage/ssoauthenticate' => Http::response($this->identity()),
         ]);
         $directory = $this->mock(CognitoDirectory::class);
         $directory->shouldReceive('resolveUsername')->andReturn(null);
-        $directory->shouldReceive('provision')->once()->with(\Mockery::on(fn ($identity) => $identity['source'] === 'cloud'), 'password')->andReturn('legacy-user');
+        $directory->shouldReceive('provision')->once()->with(Mockery::on(fn ($identity) => $identity['source'] === 'cloud'), 'password')->andReturn('legacy-user');
         $this->assertSame('legacy-user', (new LegacyMigrationService($directory))->resolve('person@example.com', 'password'));
-        Http::assertSentCount(2);
-        Http::assertSent(fn ($request) => $request->url() === 'https://cloud.example.com/verify'
+        Http::assertSentCount(3);
+        Http::assertSent(fn ($request) => $request->url() === 'https://cloud.example.com/backstage/ssoauthenticate'
             && $request['identifier'] === 'person@example.com' && $request->hasHeader('Authorization', 'Bearer cloud-token'));
+    }
+
+    public function test_wordpress_success_is_verified_once_and_skips_cloud(): void
+    {
+        $this->enable();
+        config(['migration.providers.cloud' => ['enabled' => true]]);
+        Http::fake(['https://legacy.example.com/verify' => Http::response($this->wordpressIdentity())]);
+        $directory = $this->mock(CognitoDirectory::class);
+        $directory->shouldReceive('resolveUsername')->andReturn(null);
+        $directory->shouldReceive('provision')->once()->andReturn('wp_123');
+
+        $this->assertSame('wp_123', (new LegacyMigrationService($directory))->resolve('person@example.com', 'password'));
+        Http::assertSentCount(1);
+    }
+
+    public function test_cloud_email_username_is_passed_to_provisioning_with_verified_names(): void
+    {
+        $this->enable();
+        config(['migration.providers.cloud' => ['enabled' => true, 'base_url' => 'https://cloud.example.com', 'username' => 'service-user', 'password' => 'service-password']]);
+        $username = 'example.osullivan';
+        Http::fake([
+            'https://legacy.example.com/verify' => Http::response([], 404),
+            'https://cloud.example.com/generate-token*' => Http::response(['Token' => 'cloud-token', 'ExpireTime' => now()->addHour()->toIso8601String()]),
+            'https://cloud.example.com/backstage/ssoauthenticate' => Http::response([
+                'authenticated' => true,
+                'user' => [
+                    'id' => 'source-user-123', 'username' => 'person@example.com', 'email' => 'person@example.com',
+                    'email_verified' => true, 'given_name' => 'Example', 'family_name' => "O'Sullivan",
+                ],
+            ]),
+        ]);
+        $directory = $this->mock(CognitoDirectory::class);
+        $directory->shouldReceive('resolveUsername')->with('person@example.com')->andReturn(null);
+        $directory->shouldReceive('provision')->twice()->with([
+            'source' => 'cloud', 'id' => 'source-user-123', 'username' => 'person@example.com', 'email' => 'person@example.com',
+            'given_name' => 'Example', 'family_name' => "O'Sullivan",
+        ], 'password')->andReturn($username);
+
+        $service = new LegacyMigrationService($directory);
+        $this->assertSame($username, $service->resolve('person@example.com', 'password'));
+        $this->assertSame($username, $service->resolve('person@example.com', 'password'));
+        Http::assertSentCount(5);
+        $this->assertCount(1, Http::recorded(fn ($request) => $request->method() === 'GET'));
     }
 
     public function test_provider_outage_is_not_treated_as_absent_user(): void
     {
         $this->enable();
+        config(['migration.providers.cloud' => ['enabled' => true]]);
         Http::fake(['*' => Http::response([], 503)]);
         $directory = $this->mock(CognitoDirectory::class);
         $directory->shouldReceive('resolveUsername')->andReturn(null);
@@ -94,8 +140,11 @@ class LegacyMigrationTest extends TestCase
     public function test_unverified_legacy_email_cannot_create_verified_cognito_account(): void
     {
         $this->enable();
-        config(['migration.providers' => ['cloud' => ['driver' => 'json_bearer', 'enabled' => true, 'endpoint' => 'https://cloud.example.com/verify', 'token' => 'cloud-token']]]);
-        Http::fake(['*' => Http::response($this->identity(['email_verified' => false]))]);
+        config(['migration.providers' => ['cloud' => ['enabled' => true, 'base_url' => 'https://cloud.example.com', 'username' => 'service-user', 'password' => 'service-password']]]);
+        Http::fake([
+            'https://cloud.example.com/generate-token*' => Http::response(['Token' => 'cloud-token', 'ExpireTime' => now()->addHour()->toIso8601String()]),
+            'https://cloud.example.com/backstage/ssoauthenticate' => Http::response($this->identity(['email_verified' => false])),
+        ]);
         $directory = $this->mock(CognitoDirectory::class);
         $directory->shouldReceive('resolveUsername')->andReturn(null);
         $directory->shouldNotReceive('provision');
@@ -130,16 +179,59 @@ class LegacyMigrationTest extends TestCase
         Http::fake(['*' => Http::response($this->wordpressIdentity(['first_name' => '', 'last_name' => '']))]);
         $directory = $this->mock(CognitoDirectory::class);
         $directory->shouldReceive('resolveUsername')->andReturn(null);
-        $directory->shouldReceive('provision')->once()->with(\Mockery::on(fn ($identity) => $identity['given_name'] === 'Unknown' && $identity['family_name'] === 'User'), 'password')->andReturn('wp_123');
+        $directory->shouldReceive('provision')->once()->with(Mockery::on(fn ($identity) => $identity['given_name'] === 'Unknown' && $identity['family_name'] === 'User'), 'password')->andReturn('wp_123');
         $this->assertSame('wp_123', (new LegacyMigrationService($directory))->resolve('person@example.com', 'password'));
     }
 
     public function test_provisioning_never_adopts_a_pool_account_created_during_verification(): void
     {
         $this->enable();
-        $directory = \Mockery::mock(CognitoDirectory::class)->makePartial();
+        $directory = Mockery::mock(CognitoDirectory::class)->makePartial();
         $directory->shouldReceive('hasIdentity')->with('legacy-user')->andReturn(true);
         $this->expectExceptionMessage('An account already exists');
         $directory->provision($this->identity()['user'], 'password');
+    }
+
+    public function test_password_recovery_uses_the_signed_wordpress_lookup_and_then_provisions_a_role_free_account(): void
+    {
+        config([
+            'migration.password_recovery_enabled' => true,
+            'migration.providers.wordpress' => [
+                'enabled' => true,
+                'lookup_endpoint' => 'https://wordpress.example.test/wp-json/cognito-migrate/v1/lookup',
+                'token' => 'shared-secret',
+            ],
+        ]);
+        Http::fake(function ($request) {
+            $body = '{"username":"missing@example.com"}';
+            $this->assertSame($body, $request->body());
+            $timestamp = $request->header('X-Cognito-Migrate-Timestamp')[0];
+            $this->assertMatchesRegularExpression('/^\d+$/', $timestamp);
+            $this->assertSame(hash_hmac('sha256', $timestamp.'.'.$body, 'shared-secret'), $request->header('X-Cognito-Migrate-Signature')[0]);
+
+            return Http::response(['ok' => true, 'user' => [
+                'id' => 123, 'user_login' => 'wordpress-user', 'email' => 'person@example.com', 'first_name' => 'Example', 'last_name' => 'User',
+            ]]);
+        });
+        $directory = $this->mock(CognitoDirectory::class);
+        $directory->shouldReceive('hasIdentity')->with('wordpress-user')->once()->andReturn(false);
+        $directory->shouldReceive('hasIdentity')->with('person@example.com')->once()->andReturn(false);
+        $directory->shouldReceive('provisionForPasswordRecovery')->once()->with(Mockery::on(fn ($identity) => $identity === [
+            'source' => 'wordpress', 'id' => '123', 'username' => 'wordpress-user', 'email' => 'person@example.com', 'given_name' => 'Example', 'family_name' => 'User',
+        ]))->andReturn('wordpress-user');
+
+        $this->assertSame('wordpress-user', (new LegacyMigrationService($directory))->recoverForPasswordReset('missing@example.com'));
+    }
+
+    public function test_password_recovery_returns_no_match_for_a_wordpress_lookup_not_found(): void
+    {
+        config(['migration.password_recovery_enabled' => true, 'migration.providers.wordpress' => [
+            'enabled' => true, 'lookup_endpoint' => 'https://wordpress.example.test/lookup', 'token' => 'shared-secret',
+        ]]);
+        Http::fake(['*' => Http::response(['ok' => false], 404)]);
+        $directory = $this->mock(CognitoDirectory::class);
+        $directory->shouldNotReceive('hasIdentity');
+
+        $this->assertNull((new LegacyMigrationService($directory))->recoverForPasswordReset('missing@example.com'));
     }
 }

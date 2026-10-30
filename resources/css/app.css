@@ -275,11 +275,44 @@ body {
     content: '☾';
 }
 
-.application-logo { display: flex; align-items: center; height: 5rem; }
-.application-logo img { max-height: 100%; max-width: 6rem; object-fit: contain; object-position: left center; }
-.application-logo--guestlist img { max-height: 4.75rem; }
-:root[data-theme='dark'] .application-logo--rslcloud img { content: url('/images/app-logos/rsl-cloud-dark.svg'); }
-:root[data-theme='dark'] .application-logo--backstage img { content: url('/images/app-logos/backstage-dark.svg'); }
+.application-logo {
+    display: flex;
+    align-items: center;
+    height: 5rem;
+}
+
+.application-logo img {
+    max-height: 100%;
+    max-width: 6rem;
+    object-fit: contain;
+    object-position: left center;
+}
+
+.application-logo--guestlist img {
+    max-height: 4.75rem;
+}
+
+:root[data-theme='dark'] .application-logo--rslcloud img {
+    content: url('/images/app-logos/rsl-cloud-dark.svg');
+}
+
+:root[data-theme='dark'] .application-logo--backstage img {
+    content: url('/images/app-logos/backstage-dark.svg');
+}
+
+.portal-provider-logo {
+    width: 100%;
+    justify-content: center;
+    height: 6rem;
+}
+
+.portal-provider-logo img {
+    display: block;
+    margin-inline: auto;
+    max-width: 14rem;
+    max-height: 100%;
+    object-position: center;
+}
 
 :root[data-theme='dark'] .theme-toggle__icon::before {
     content: '☀';
@@ -299,6 +332,7 @@ h3 {
 }
 
 @media (min-width: 1200px) {
+
     h1,
     .h1 {
         font-size: 2.5rem;
@@ -323,17 +357,65 @@ h3 {
     white-space: nowrap;
 }
 
-.portal-status-badge--success { background: #e8f6ee; border-color: #b5dfc5; color: #21623e; }
-.portal-status-badge--warning { background: #fff3d9; border-color: #eed19b; color: #80500c; }
-.portal-status-badge--danger { background: #fcebec; border-color: #efbdc2; color: #9c303d; }
-.portal-status-badge--info { background: #e6f3fb; border-color: #b2d6ed; color: #236180; }
-.portal-status-badge--neutral { background: #eef0f3; border-color: #d0d6de; color: #505d6c; }
+.portal-status-badge--success {
+    background: #e8f6ee;
+    border-color: #b5dfc5;
+    color: #21623e;
+}
 
-:root[data-theme='dark'] .portal-status-badge--success { background: #183d2d; border-color: #316849; color: #a5e1bb; }
-:root[data-theme='dark'] .portal-status-badge--warning { background: #42331a; border-color: #786035; color: #f6d28c; }
-:root[data-theme='dark'] .portal-status-badge--danger { background: #45262d; border-color: #7f424e; color: #ffbbc4; }
-:root[data-theme='dark'] .portal-status-badge--info { background: #203849; border-color: #3d6680; color: #acd9f3; }
-:root[data-theme='dark'] .portal-status-badge--neutral { background: #2a323c; border-color: #4c5868; color: #c7d0dc; }
+.portal-status-badge--warning {
+    background: #fff3d9;
+    border-color: #eed19b;
+    color: #80500c;
+}
+
+.portal-status-badge--danger {
+    background: #fcebec;
+    border-color: #efbdc2;
+    color: #9c303d;
+}
+
+.portal-status-badge--info {
+    background: #e6f3fb;
+    border-color: #b2d6ed;
+    color: #236180;
+}
+
+.portal-status-badge--neutral {
+    background: #eef0f3;
+    border-color: #d0d6de;
+    color: #505d6c;
+}
+
+:root[data-theme='dark'] .portal-status-badge--success {
+    background: #183d2d;
+    border-color: #316849;
+    color: #a5e1bb;
+}
+
+:root[data-theme='dark'] .portal-status-badge--warning {
+    background: #42331a;
+    border-color: #786035;
+    color: #f6d28c;
+}
+
+:root[data-theme='dark'] .portal-status-badge--danger {
+    background: #45262d;
+    border-color: #7f424e;
+    color: #ffbbc4;
+}
+
+:root[data-theme='dark'] .portal-status-badge--info {
+    background: #203849;
+    border-color: #3d6680;
+    color: #acd9f3;
+}
+
+:root[data-theme='dark'] .portal-status-badge--neutral {
+    background: #2a323c;
+    border-color: #4c5868;
+    color: #c7d0dc;
+}
 
 .portal-row-action-trigger:hover,
 .portal-row-action-trigger:focus-visible,
@@ -353,6 +435,15 @@ h3 {
     font-size: 0.875rem;
 }
 
-.portal-row-menu-item:disabled { opacity: 0.4; cursor: not-allowed; }
-.portal-row-menu-item--danger { color: #a72f3e; }
-:root[data-theme='dark'] .portal-row-menu-item--danger { color: #ffbbc4; }
+.portal-row-menu-item:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.portal-row-menu-item--danger {
+    color: #a72f3e;
+}
+
+:root[data-theme='dark'] .portal-row-menu-item--danger {
+    color: #ffbbc4;
+}

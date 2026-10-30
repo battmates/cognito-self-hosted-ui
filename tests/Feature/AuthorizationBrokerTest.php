@@ -109,13 +109,24 @@ class AuthorizationBrokerTest extends TestCase
         $this->withHeader('Authorization', 'Basic '.base64_encode('shared-client:client-secret'))->post('/oauth2/token', ['grant_type' => 'authorization_code', 'code' => $code, 'redirect_uri' => $this->params()['redirect_uri']])->assertOk();
     }
 
-    public function test_referral_headline_and_login_complete_the_original_callback(): void
+    public function test_provider_logo_and_login_complete_the_original_callback(): void
     {
-        $this->get('/login?'.http_build_query($this->params()))->assertOk()->assertSee('Please login or register to continue to Backstage');
+        $this->get('/login?'.http_build_query($this->params()))->assertOk()->assertSee('images/app-logos/backstage-light.svg')->assertDontSee('Please login or register to continue');
         $id = session('portal.authorization.request_id');
         $result = ['user' => $this->auth()['auth']['status']['user'], 'tokens' => $this->auth()['auth']['tokens']];
         $this->mock(CognitoIdentityService::class)->shouldReceive('login')->once()->andReturn($result);
         $this->post('/login', ['email' => 'tester', 'password' => 'password', 'portal_request' => $id])->assertRedirectContains('https://staging.rockschool.io/cognito-login?code=');
+    }
+
+    public function test_cloud_login_shows_cloud_logo_instead_of_referral_heading(): void
+    {
+        config(['sso.consumers.cloud.callback_urls' => ['https://cloud.example.test/callback']]);
+
+        $this->get('/login?'.http_build_query($this->params(['redirect_uri' => 'https://cloud.example.test/callback'])))
+            ->assertOk()
+            ->assertSee('images/app-logos/rsl-cloud-light.svg')
+            ->assertSee('RSL Cloud logo')
+            ->assertDontSee('Please login or register to continue');
     }
 
     public function test_tabs_keep_separate_application_requests(): void
@@ -125,7 +136,7 @@ class AuthorizationBrokerTest extends TestCase
         $this->get('/login?'.http_build_query($this->params(['redirect_uri' => 'https://staging.guestlist.rockschool.io/cognito/callback'])));
         $guestlist = session('portal.authorization.request_id');
         $this->assertNotSame($backstage, $guestlist);
-        $this->get('/register?portal_request='.$backstage)->assertSee('continue to Backstage')->assertDontSee('continue to Guestlist');
+        $this->get('/register?portal_request='.$backstage)->assertSee('images/app-logos/backstage-light.svg')->assertDontSee('images/app-logos/guestlist.svg');
     }
 
     public function test_prompt_none_returns_login_required_with_state_and_login_forces_form(): void
@@ -211,9 +222,9 @@ class AuthorizationBrokerTest extends TestCase
         $this->get('/login?'.http_build_query($this->params()));
         $id = session('portal.authorization.request_id');
         $registration = $this->post('/register', ['portal_request' => $id, 'username' => 'new-user', 'email' => 'new@example.com', 'first_name' => 'New', 'last_name' => 'User', 'password' => 'Password123!', 'password_confirmation' => 'Password123!', 'accept_policies' => 1])->assertRedirectContains('/register/confirm');
-        $this->get($registration->headers->get('Location'))->assertOk()->assertSee('continue to Backstage');
+        $this->get($registration->headers->get('Location'))->assertOk()->assertSee('images/app-logos/backstage-light.svg');
         $confirmation = $this->post('/register/confirm', ['portal_request' => $id, 'username' => 'new-user', 'email' => 'new@example.com', 'code' => '123456'])->assertRedirectContains('/login');
-        $this->get($confirmation->headers->get('Location'))->assertOk()->assertSee('continue to Backstage');
+        $this->get($confirmation->headers->get('Location'))->assertOk()->assertSee('images/app-logos/backstage-light.svg');
         $this->post('/login', ['portal_request' => $id, 'email' => 'new-user', 'password' => 'Password123!'])->assertRedirectContains('https://staging.rockschool.io/cognito-login?code=');
     }
 }

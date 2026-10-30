@@ -46,7 +46,22 @@
         @endif
 
         @if (!empty($portalContext['application_name']) && !$showPortalOverview)
-            <h1 class="portal-heading text-center text-2xl lg:text-3xl">Please login or register to continue to {{ $portalContext['application_name'] }}</h1>
+            @php
+                $providerLogo = match ($portalContext['consumer'] ?? null) {
+                    'cloud' => 'rsl-cloud-light.svg',
+                    'backstage' => 'backstage-light.svg',
+                    'guestlist' => 'guestlist.svg',
+                    'musicteacher' => 'musicteacher.svg',
+                    default => null,
+                };
+            @endphp
+            @if ($providerLogo)
+                <h1 class="application-logo application-logo--{{ str_replace([' ', '.'], '', strtolower($portalContext['application_name'])) }} portal-provider-logo mx-auto w-full">
+                    <img src="{{ asset('images/app-logos/'.$providerLogo) }}" alt="{{ $portalContext['application_name'] }} logo">
+                </h1>
+            @else
+                <h1 class="portal-heading text-center text-2xl lg:text-3xl">{{ $portalContext['application_name'] }}</h1>
+            @endif
         @endif
 
         @if (session('portal.notice'))

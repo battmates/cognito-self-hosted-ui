@@ -16,27 +16,35 @@ class LegacyMigrationService
         if (! config('migration.enabled')) {
             return $identifier;
         }
+        if ($username = $this->directory->resolveUsername($identifier)) {
+            return $username;
+        }
         if (! config('sso.management_writes_enabled')) {
             throw new RuntimeException('Account migration is not available yet. Please contact support.');
         }
-        if ($this->directory->hasIdentity($identifier)) {
-            return $identifier;
-        }
-        $identity = null;
-        // WordPress takes priority. Only try Cloud when WordPress has no match.
         foreach (['wordpress', 'cloud'] as $name) {
             $provider = config('migration.providers.'.$name, []);
-            if ($provider['enabled'] ?? false) {
-                $identity = $this->verify($name, $provider, $identifier, $password);
-                if ($identity) {
-                    break;
+            if (! ($provider['enabled'] ?? false)) {
+                continue;
+            }
+            $identity = $this->verify($name, $provider, $identifier, $password);
+            if (! $identity) {
+                continue;
+            }
+            foreach (array_unique([$identity['username'], $identity['email']]) as $poolIdentifier) {
+                if ($username = $this->directory->resolveUsername($poolIdentifier)) {
+                    return $username;
                 }
             }
-        }
-        if (! $identity) {
-            throw new RuntimeException('Incorrect email, username, or password.');
+
+            return $this->provision($identity, $password);
         }
 
+        throw new RuntimeException('Incorrect email, username, or password.');
+    }
+
+    private function provision(array $identity, string $password): string
+    {
         // Different username/email entry points for the same person share a lock.
         return Cache::lock('portal.migrate.'.hash('sha256', strtolower($identity['email'])), 60)->block(3, function () use ($identity, $password) {
             $username = $this->directory->provision($identity, $password);
@@ -83,24 +91,25 @@ class LegacyMigrationService
     {
         $data = $source === 'cloud'
             ? app(CloudMigrationClient::class)->authenticate($provider, $identifier, $password)
-            : $this->verifyWordPress($provider, $identifier, $password);
+            : $this->verifyProvider($provider, $identifier, $password);
         if ($data === null) {
             return null;
         }
 
-        return $this->verifiedIdentity($source, $data, $identifier);
+        return $this->verifiedIdentity($source, $data, $identifier, ($provider['driver'] ?? '') === 'wordpress_hmac');
     }
 
-    private function verifyWordPress(array $provider, string $identifier, string $password): ?array
+    private function verifyProvider(array $provider, string $identifier, string $password): ?array
     {
         $endpoint = $provider['endpoint'] ?? '';
-        if (parse_url($endpoint, PHP_URL_SCHEME) !== 'https' || ! parse_url($endpoint, PHP_URL_HOST) || parse_url($endpoint, PHP_URL_USER) || parse_url($endpoint, PHP_URL_FRAGMENT) || empty($provider['token'])) {
+        if (parse_url($endpoint, PHP_URL_SCHEME) !== 'https' || ! parse_url($endpoint, PHP_URL_HOST) || parse_url($endpoint, PHP_URL_USER) || parse_url($endpoint, PHP_URL_FRAGMENT)) {
             throw new RuntimeException('Legacy account verification is not configured. Please contact support.');
         }
-        // No redirects or retries: credentials go only to the operator-configured endpoint.
-        $response = Http::withToken($provider['token'])->acceptJson()->asJson()
-            ->connectTimeout(5)->timeout(15)->withoutRedirecting()
-            ->post($endpoint, ['identifier' => $identifier, 'password' => $password]);
+        $response = match ($provider['driver'] ?? '') {
+            'wordpress_hmac' => $this->verifyWordPress($provider, $endpoint, $identifier, $password),
+            'json_bearer' => $this->verifyJsonBearer($provider, $endpoint, $identifier, $password),
+            default => throw new RuntimeException('Legacy account verification is not configured. Please contact support.'),
+        };
         if (in_array($response->status(), [401, 404], true)) {
             return null;
         }
@@ -115,13 +124,16 @@ class LegacyMigrationService
         return $data;
     }
 
-    private function verifiedIdentity(string $source, array $data, string $identifier): array
+    private function verifiedIdentity(string $source, array $data, string $identifier, bool $wordpress): array
     {
+        if ($wordpress) {
+            $data = $this->normalizeWordPressResponse($data);
+        }
         if (! is_array($data) || ($data['authenticated'] ?? null) !== true || ! is_array($data['user'] ?? null)) {
             throw new RuntimeException('Legacy account verification returned an invalid response.');
         }
         $user = $data['user'];
-        foreach (['id', 'username', 'email', 'given_name', 'family_name'] as $key) {
+        foreach (['id', 'username', 'email'] as $key) {
             if (! is_string($user[$key] ?? null) || trim($user[$key]) === '' || strlen($user[$key]) > 256) {
                 throw new RuntimeException('The legacy account is missing required identity details. Please contact support.');
             }
@@ -132,19 +144,87 @@ class LegacyMigrationService
         if (! in_array(strtolower($identifier), [strtolower($user['username']), strtolower($user['email'])], true)) {
             throw new RuntimeException('The legacy response does not match the requested account.');
         }
+        foreach (['given_name', 'family_name'] as $name) {
+            if (! $wordpress && (! is_string($user[$name] ?? null) || trim($user[$name]) === '' || strlen($user[$name]) > 256)) {
+                throw new RuntimeException('The legacy account is missing required identity details. Please contact support.');
+            }
+        }
         $username = $user['username'];
+        $preferredUsername = null;
+        if ($wordpress) {
+            if (! ctype_digit($user['id'])) {
+                throw new RuntimeException('The legacy account is missing required identity details. Please contact support.');
+            }
+            $preferredUsername = $username;
+            $username = 'wp_'.$user['id'];
+        }
         if (! filter_var($username, FILTER_VALIDATE_EMAIL) && (strlen($username) > 128 || ! preg_match('/^[\p{L}\p{M}\p{S}\p{N}\p{P}]+$/uD', $username))) {
             throw new RuntimeException('The legacy username needs review before migration.');
         }
 
-        // Explicit whitelist: never import roles, verification overrides or admin flags.
-        return ['source' => $source, 'id' => $user['id'], 'username' => $username, 'email' => strtolower($user['email']), 'given_name' => $user['given_name'], 'family_name' => $user['family_name']];
+        // Explicit whitelist: never import roles or admin flags. Email-style
+        // Cloud usernames are converted to unique names at provisioning time.
+        $identity = ['source' => $source, 'id' => $user['id'], 'username' => $username, 'email' => strtolower($user['email']),
+            'given_name' => trim((string) ($user['given_name'] ?? '')) ?: 'Unknown',
+            'family_name' => trim((string) ($user['family_name'] ?? '')) ?: 'User'];
+        if ($preferredUsername !== null) {
+            $identity['preferred_username'] = $preferredUsername;
+        }
+
+        return $identity;
+    }
+
+    private function verifyWordPress(array $provider, string $endpoint, string $identifier, string $password)
+    {
+        $secret = $provider['secret'] ?? '';
+        if (! is_string($secret) || $secret === '') {
+            throw new RuntimeException('Legacy account verification is not configured. Please contact support.');
+        }
+        $body = json_encode(['username' => $identifier, 'password' => $password], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+        $timestamp = (string) time();
+
+        // The signature covers the exact bytes sent. Redirects and retries stay disabled
+        // so credentials can only reach the configured MusicTeacher endpoint once.
+        return Http::acceptJson()->withHeaders([
+            'X-Cognito-Migrate-Timestamp' => $timestamp,
+            'X-Cognito-Migrate-Signature' => hash_hmac('sha256', $timestamp.'.'.$body, $secret),
+        ])->withBody($body, 'application/json')->connectTimeout(5)->timeout(15)->withoutRedirecting()->post($endpoint);
+    }
+
+    private function verifyJsonBearer(array $provider, string $endpoint, string $identifier, string $password)
+    {
+        if (empty($provider['token'])) {
+            throw new RuntimeException('Legacy account verification is not configured. Please contact support.');
+        }
+
+        return Http::withToken($provider['token'])->acceptJson()->asJson()
+            ->connectTimeout(5)->timeout(15)->withoutRedirecting()
+            ->post($endpoint, ['identifier' => $identifier, 'password' => $password]);
+    }
+
+    private function normalizeWordPressResponse(mixed $data): mixed
+    {
+        if (! is_array($data) || ($data['ok'] ?? null) !== true || ! is_array($data['user'] ?? null)) {
+            return $data;
+        }
+        $user = $data['user'];
+
+        return ['authenticated' => true, 'user' => [
+            'id' => (string) ($user['id'] ?? ''),
+            'username' => (string) ($user['user_login'] ?? ''),
+            'email' => (string) ($user['email'] ?? ''),
+            // MusicTeacher historically treats the email stored on a password-verified
+            // WordPress account as authoritative, as does its existing Cognito sync.
+            'email_verified' => true,
+            'given_name' => (string) ($user['first_name'] ?? ''),
+            'family_name' => (string) ($user['last_name'] ?? ''),
+        ]];
     }
 
     private function lookupWordPress(array $provider, string $identifier): ?array
     {
         $endpoint = $provider['lookup_endpoint'] ?? '';
-        $secret = $provider['token'] ?? '';
+        $secret = $provider['secret'] ?? $provider['token'] ?? '';
         if (! is_string($endpoint) || ! is_string($secret) || $secret === '' || ! $this->validEndpoint($endpoint)) {
             throw new RuntimeException('Legacy password recovery is not configured. Please contact support.');
         }

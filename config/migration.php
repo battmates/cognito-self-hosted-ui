@@ -5,6 +5,8 @@ return [
     'password_recovery_enabled' => (bool) env('LEGACY_PASSWORD_RECOVERY_ENABLED', false),
     'providers' => [
         'wordpress' => [
+            'driver' => 'wordpress_hmac',
+            'secret' => env('MIGRATION_WORDPRESS_SHARED_SECRET', env('MIGRATION_WORDPRESS_API_TOKEN')),
             'enabled' => (bool) env('MIGRATION_WORDPRESS_ENABLED', false),
             'endpoint' => env('MIGRATION_WORDPRESS_ENDPOINT'),
             'lookup_endpoint' => env('MIGRATION_WORDPRESS_LOOKUP_ENDPOINT'),

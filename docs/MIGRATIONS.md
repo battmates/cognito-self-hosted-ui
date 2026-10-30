@@ -1,4 +1,4 @@
-# Legacy migration adapter contract (disabled)
+# Legacy account migration
 
 `LEGACY_MIGRATION_ENABLED=false` keeps migrations disabled. Administrator management writes are now enabled by user request (`COGNITO_MANAGEMENT_WRITES_ENABLED=true`); this alone does not enable migrations. WordPress requires its HTTPS verification endpoint and server API token. Cloud uses the two API calls described below.
 
@@ -28,11 +28,28 @@ With that token, the portal sends JSON `{"identifier":"<entered username or emai
 
 A successful lookup creates a role-free Cognito account with a generated server-only password, then invokes Cognito's normal forgot-password operation. The reset code therefore goes only to the WordPress account's returned email and Cognito remains responsible for the final password reset. No legacy password, WordPress role, or WordPress session is transferred.
 
-For WordPress login verification, the portal posts JSON with `identifier` (username or email, entered by the user) and `password`, authenticated with `Authorization: Bearer <provider token>`. The endpoint must validate the actual password through the legacy platform's supported authentication API; a user-exists response is insufficient. It must support both identifier types. Use constant-time password verification, generic failure responses and rate limits. Never log the password or authorization header.
+## MusicTeacher WordPress
 
-- Return 401/404 for invalid credentials/no such account.
-- Return 200 only for verified credentials, with the following JSON.
-- Return 429/5xx for throttling/outages. The portal stops instead of treating these as absent accounts.
+The MusicTeacher adapter uses the endpoint already supplied by the `wp-cognito-sso` plugin:
+
+`https://woocommerce-1671671-6675507.cloudwaysapps.com/wp-json/cognito-migrate/v1/verify`
+
+Laravel sends the exact JSON body `{ "username": "...", "password": "..." }`. It signs `<unix timestamp>.<raw body>` with HMAC-SHA256 and sends the timestamp and hex signature as `X-Cognito-Migrate-Timestamp` and `X-Cognito-Migrate-Signature`. The shared secret must match the plugin's **Cognito user migration → Shared secret** setting (or its `COGNITO_MIGRATION_SHARED_SECRET` constant).
+
+```dotenv
+LEGACY_MIGRATION_ENABLED=true
+MIGRATION_WORDPRESS_ENABLED=true
+MIGRATION_WORDPRESS_ENDPOINT=https://woocommerce-1671671-6675507.cloudwaysapps.com/wp-json/cognito-migrate/v1/verify
+MIGRATION_WORDPRESS_SHARED_SECRET=replace-with-the-existing-shared-secret
+```
+
+The endpoint verifies the actual WordPress password and supports either login name or email. A successful response is normalized to Cognito attributes. To remain compatible with accounts created by the former migration Lambda, the canonical Cognito username is `wp_<WordPress user ID>` and the WordPress login is stored as `preferred_username`. Email and legacy username sign-ins both resolve back to that canonical username. Blank WordPress names use the same `Unknown` / `User` fallback as the Lambda.
+
+MusicTeacher's existing Lambda and WordPress-to-Cognito sync both treat the email on a password-verified WordPress account as authoritative, so the Laravel migration preserves that behavior and creates it as `email_verified=true`.
+
+## RSL Cloud adapter contract
+
+Cloud uses the token acquisition and caching flow above. Its authentication endpoint expects the following successful response:
 
 ```json
 {
@@ -51,5 +68,14 @@ For WordPress login verification, the portal posts JSON with `identifier` (usern
 WordPress takes priority over Cloud for login migration. Unverified email, missing names, mismatched identifiers and directory outages block migration. Existing Cognito identities always retain their own authentication flow, and no legacy password can reset an existing pool account. The exact submitted password is used for the new pool account and must satisfy its current password policy.
 
 Only the listed identity fields are imported; no roles or admin flags are copied. Email-style legacy usernames receive a sanitized lowercase `givenname.familyname` Cognito username; email sign-in continues to use the verified alias. If a name is already taken, the portal checks candidates with numeric suffixes (`_2`, `_3`, and so on, up to 100 attempts). It also retries a Cognito `UsernameExistsException` if another signup takes a candidate during creation. Existing email aliases still block migration; password-setting failures after creation require operator review and never retry creation. The same naming applies to password-recovery provisioning. Normal legacy usernames are retained. Provisioning uses a shared-cache lock by email, checks username/email collisions again, suppresses welcome messages, and never enables `ForceAliasCreation`. AdminCreateUser and AdminSetUserPassword cannot form one AWS transaction: a partial failure requires operator review, with no automatic overwrite, adoption or deletion. Native registration or another application can still race between AWS checks; validate concurrent alias behavior in staging before rollout.
+The WordPress endpoint returns 401/404 for invalid credentials or absent accounts. Cloud no-match responses use the format described above. Throttling and outages stop migration.
 
-To activate, obtain endpoints from MusicTeacher WordPress and RSL Cloud owners, confirm authoritative email verification semantics, decide how overlapping identities should be linked, approve SDK writes, and test with specifically designated migration accounts. The existing Cognito migration Lambda stays untouched. This adapter intercepts absent identities before direct Cognito password authentication when enabled; accounts already in the pool use Cognito normally. Not-yet-migrated password recovery still needs a separate workflow decision.
+## Safety and provisioning
+
+- Only ID, username, email and names are accepted; roles and admin flags are never imported.
+- Passwords and authorization credentials are never logged. Verification requests do not redirect or retry.
+- The exact submitted password is set as the new permanent Cognito password and must meet the pool policy.
+- A cache lock serializes migration by normalized email. Username and email collisions are checked again before creation.
+- Welcome messages are suppressed and `ForceAliasCreation` stays false.
+- `AdminCreateUser` and `AdminSetUserPassword` cannot form one AWS transaction. A partial failure requires operator review; the portal does not overwrite, adopt or delete an account automatically.
+- The existing Cognito migration Lambda is not modified by this implementation. Remove it from the pool only after the Laravel path has been enabled and verified with designated accounts.

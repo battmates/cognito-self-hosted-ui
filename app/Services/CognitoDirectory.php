@@ -26,7 +26,7 @@ class CognitoDirectory
 
     public function search(string $field = 'email', string $query = '', ?string $cursor = null, bool $exact = false): array
     {
-        if (! in_array($field, ['email', 'username', 'given_name', 'family_name', 'sub'], true)) {
+        if (! in_array($field, ['email', 'username', 'preferred_username', 'given_name', 'family_name', 'sub'], true)) {
             throw new RuntimeException('Unsupported search field.');
         }
         $input = ['UserPoolId' => config('services.cognito.user_pool_id'), 'Limit' => 30];
@@ -124,16 +124,25 @@ class CognitoDirectory
 
     public function hasIdentity(string $identifier): bool
     {
-        if ($this->get($identifier)) {
-            return true;
+        return $this->resolveUsername($identifier) !== null;
+    }
+
+    public function resolveUsername(string $identifier): ?string
+    {
+        if ($user = $this->get($identifier)) {
+            return $user['Username'] ?? $identifier;
         }
         if (filter_var($identifier, FILTER_VALIDATE_EMAIL)) {
             $page = $this->search('email', strtolower($identifier), null, true);
-
-            return ! empty($page['Users']) || ! empty($page['PaginationToken']);
+        } else {
+            $page = $this->search('preferred_username', $identifier, null, true);
         }
 
-        return false;
+        if (count($page['Users'] ?? []) > 1 || ! empty($page['PaginationToken'])) {
+            throw new RuntimeException('More than one account matches this identifier. Please contact support.');
+        }
+
+        return $page['Users'][0]['Username'] ?? null;
     }
 
     public function manage(string $username, string $action, array $input = []): void
@@ -231,6 +240,7 @@ class CognitoDirectory
         if (! config('migration.enabled') || ! config('sso.management_writes_enabled')) {
             throw new RuntimeException('Migration writes are disabled.');
         }
+
         return $this->createMigratedUser($identity, $password, 'Account migration could not be completed. Please contact support.');
     }
 
@@ -260,16 +270,20 @@ class CognitoDirectory
             if ($generateUsername && $this->hasIdentity($username)) {
                 continue;
             }
+            $attributes = [
+                ['Name' => 'email', 'Value' => $identity['email']],
+                ['Name' => 'email_verified', 'Value' => 'true'],
+                ['Name' => 'given_name', 'Value' => $identity['given_name']],
+                ['Name' => 'family_name', 'Value' => $identity['family_name']],
+            ];
+            if (($identity['preferred_username'] ?? '') !== '') {
+                $attributes[] = ['Name' => 'preferred_username', 'Value' => $identity['preferred_username']];
+            }
             try {
                 $this->client->adminCreateUser([
                     'UserPoolId' => config('services.cognito.user_pool_id'), 'Username' => $username,
                     'TemporaryPassword' => $password, 'MessageAction' => 'SUPPRESS', 'ForceAliasCreation' => false,
-                    'UserAttributes' => [
-                        ['Name' => 'email', 'Value' => $identity['email']],
-                        ['Name' => 'email_verified', 'Value' => 'true'],
-                        ['Name' => 'given_name', 'Value' => $identity['given_name']],
-                        ['Name' => 'family_name', 'Value' => $identity['family_name']],
-                    ],
+                    'UserAttributes' => $attributes,
                 ]);
             } catch (AwsException $exception) {
                 // Another signup may take the name after our directory check.

@@ -51,6 +51,19 @@ class CognitoMigrationUsernameTest extends TestCase
         $this->assertSame('aaron.osullivan', $directory->provision($this->identity(), 'Password123!'));
     }
 
+    public function test_wordpress_preferred_username_is_saved_with_the_canonical_username(): void
+    {
+        $client = $this->mock(CognitoIdentityProviderClient::class);
+        $directory = $this->directory($client);
+        $directory->shouldReceive('hasIdentity')->once()->with('wp_123')->andReturn(false);
+        $directory->shouldReceive('hasIdentity')->once()->with('person@example.com')->andReturn(false);
+        $client->shouldReceive('adminCreateUser')->once()->with(Mockery::on(fn ($input) => $input['Username'] === 'wp_123'
+            && array_column($input['UserAttributes'], 'Value', 'Name')['preferred_username'] === 'legacy-user'))->andReturn(new Result);
+        $client->shouldReceive('adminSetUserPassword')->once()->with(Mockery::on(fn ($input) => $input['Username'] === 'wp_123'))->andReturn(new Result);
+
+        $this->assertSame('wp_123', $directory->provision($this->identity(['source' => 'wordpress', 'username' => 'wp_123', 'preferred_username' => 'legacy-user']), 'Password123!'));
+    }
+
     public function test_existing_name_candidates_get_an_unused_numeric_suffix(): void
     {
         $client = $this->mock(CognitoIdentityProviderClient::class);

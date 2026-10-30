@@ -22,22 +22,20 @@ class LegacyMigrationService
         if ($this->directory->hasIdentity($identifier)) {
             return $identifier;
         }
-        $candidates = [];
-        foreach (config('migration.providers', []) as $name => $provider) {
+        $identity = null;
+        // WordPress takes priority. Only try Cloud when WordPress has no match.
+        foreach (['wordpress', 'cloud'] as $name) {
+            $provider = config('migration.providers.'.$name, []);
             if ($provider['enabled'] ?? false) {
                 $identity = $this->verify($name, $provider, $identifier, $password);
                 if ($identity) {
-                    $candidates[] = $identity;
+                    break;
                 }
             }
         }
-        if (count($candidates) > 1) {
-            throw new RuntimeException('More than one legacy account matched. Please contact support to link your accounts.');
-        }
-        if (count($candidates) === 0) {
+        if (! $identity) {
             throw new RuntimeException('Incorrect email, username, or password.');
         }
-        $identity = $candidates[0];
 
         // Different username/email entry points for the same person share a lock.
         return Cache::lock('portal.migrate.'.hash('sha256', strtolower($identity['email'])), 60)->block(3, function () use ($identity, $password) {
@@ -83,6 +81,18 @@ class LegacyMigrationService
 
     private function verify(string $source, array $provider, string $identifier, string $password): ?array
     {
+        $data = $source === 'cloud'
+            ? app(CloudMigrationClient::class)->authenticate($provider, $identifier, $password)
+            : $this->verifyWordPress($provider, $identifier, $password);
+        if ($data === null) {
+            return null;
+        }
+
+        return $this->verifiedIdentity($source, $data, $identifier);
+    }
+
+    private function verifyWordPress(array $provider, string $identifier, string $password): ?array
+    {
         $endpoint = $provider['endpoint'] ?? '';
         if (parse_url($endpoint, PHP_URL_SCHEME) !== 'https' || ! parse_url($endpoint, PHP_URL_HOST) || parse_url($endpoint, PHP_URL_USER) || parse_url($endpoint, PHP_URL_FRAGMENT) || empty($provider['token'])) {
             throw new RuntimeException('Legacy account verification is not configured. Please contact support.');
@@ -98,6 +108,15 @@ class LegacyMigrationService
             throw new RuntimeException('Legacy account verification is unavailable. Please try again later.');
         }
         $data = $response->json();
+        if (! is_array($data)) {
+            throw new RuntimeException('Legacy account verification returned an invalid response.');
+        }
+
+        return $data;
+    }
+
+    private function verifiedIdentity(string $source, array $data, string $identifier): array
+    {
         if (! is_array($data) || ($data['authenticated'] ?? null) !== true || ! is_array($data['user'] ?? null)) {
             throw new RuntimeException('Legacy account verification returned an invalid response.');
         }
@@ -114,10 +133,7 @@ class LegacyMigrationService
             throw new RuntimeException('The legacy response does not match the requested account.');
         }
         $username = $user['username'];
-        if (filter_var($username, FILTER_VALIDATE_EMAIL)) {
-            $username = $source.'_'.substr(hash('sha256', $source.':'.$user['id']), 0, 40);
-        }
-        if (strlen($username) > 128 || ! preg_match('/^[\p{L}\p{M}\p{S}\p{N}\p{P}]+$/uD', $username)) {
+        if (! filter_var($username, FILTER_VALIDATE_EMAIL) && (strlen($username) > 128 || ! preg_match('/^[\p{L}\p{M}\p{S}\p{N}\p{P}]+$/uD', $username))) {
             throw new RuntimeException('The legacy username needs review before migration.');
         }
 

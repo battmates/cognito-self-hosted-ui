@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Services\CognitoDirectory;
 use App\Services\LegacyMigrationService;
 use Illuminate\Support\Facades\Http;
+use Mockery;
 use Tests\TestCase;
 
 class LegacyMigrationTest extends TestCase
@@ -50,21 +51,88 @@ class LegacyMigrationTest extends TestCase
         Http::assertSent(fn ($request) => $request['identifier'] === 'person@example.com' && $request['password'] === 'the-password' && $request->hasHeader('Authorization', 'Bearer api-token'));
     }
 
-    public function test_duplicate_legacy_matches_require_manual_resolution(): void
+    public function test_wordpress_match_skips_cloud_even_when_cloud_is_enabled(): void
     {
         $this->enable();
         config(['migration.providers.cloud' => ['enabled' => true, 'endpoint' => 'https://cloud.example.com/verify', 'token' => 'cloud-token']]);
         Http::fake(['*' => Http::response($this->identity())]);
         $directory = $this->mock(CognitoDirectory::class);
         $directory->shouldReceive('hasIdentity')->andReturn(false);
+        $directory->shouldReceive('provision')->once()->with(\Mockery::on(fn ($identity) => $identity['source'] === 'wordpress'), 'password')->andReturn('legacy-user');
+        $this->assertSame('legacy-user', (new LegacyMigrationService($directory))->resolve('person@example.com', 'password'));
+        Http::assertSentCount(1);
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), 'cloud.example.com'));
+    }
+
+    public function test_missing_wordpress_user_falls_back_to_cloud_and_provisions_verified_fields(): void
+    {
+        $this->enable();
+        config(['migration.providers.cloud' => ['enabled' => true, 'base_url' => 'https://cloud.example.com', 'username' => 'service-user', 'password' => 'service-password']]);
+        Http::fake([
+            'https://legacy.example.com/verify' => Http::response([], 404),
+            'https://cloud.example.com/generate-token*' => Http::response(['Token' => 'cloud-token', 'ExpireTime' => now()->addHour()->toIso8601String()]),
+            'https://cloud.example.com/backstage/ssoauthenticate' => Http::response($this->identity(['role' => 'administrator'])),
+        ]);
+        $directory = $this->mock(CognitoDirectory::class);
+        $directory->shouldReceive('hasIdentity')->once()->andReturn(false);
+        $directory->shouldReceive('provision')->once()->with(\Mockery::on(fn ($identity) => $identity['source'] === 'cloud' && ! isset($identity['role'])), 'password')->andReturn('legacy-user');
+
+        $this->assertSame('legacy-user', (new LegacyMigrationService($directory))->resolve('person@example.com', 'password'));
+        Http::assertSentCount(3);
+        $this->assertSame('https://legacy.example.com/verify', Http::recorded()[0][0]->url());
+    }
+
+    public function test_no_match_in_either_provider_does_not_provision(): void
+    {
+        $this->enable();
+        config(['migration.providers.cloud' => ['enabled' => true, 'base_url' => 'https://cloud.example.com', 'username' => 'service-user', 'password' => 'service-password']]);
+        Http::fake([
+            'https://legacy.example.com/verify' => Http::response([], 404),
+            'https://cloud.example.com/generate-token*' => Http::response(['Token' => 'cloud-token', 'ExpireTime' => now()->addHour()->toIso8601String()]),
+            'https://cloud.example.com/backstage/ssoauthenticate' => Http::response(['authenticated' => false, 'user' => null]),
+        ]);
+        $directory = $this->mock(CognitoDirectory::class);
+        $directory->shouldReceive('hasIdentity')->once()->andReturn(false);
         $directory->shouldNotReceive('provision');
-        $this->expectExceptionMessage('More than one legacy account matched');
+        $this->expectExceptionMessage('Incorrect email, username, or password.');
+
         (new LegacyMigrationService($directory))->resolve('person@example.com', 'password');
+    }
+
+    public function test_cloud_email_username_is_passed_to_provisioning_with_verified_names(): void
+    {
+        $this->enable();
+        config(['migration.providers.cloud' => ['enabled' => true, 'base_url' => 'https://cloud.example.com', 'username' => 'service-user', 'password' => 'service-password']]);
+        $username = 'example.osullivan';
+        Http::fake([
+            'https://legacy.example.com/verify' => Http::response([], 404),
+            'https://cloud.example.com/generate-token*' => Http::response(['Token' => 'cloud-token', 'ExpireTime' => now()->addHour()->toIso8601String()]),
+            'https://cloud.example.com/backstage/ssoauthenticate' => Http::response([
+                'authenticated' => true,
+                'user' => [
+                    'id' => 'source-user-123', 'username' => 'person@example.com', 'email' => 'person@example.com',
+                    'email_verified' => true, 'given_name' => 'Example', 'family_name' => "O'Sullivan",
+                ],
+            ]),
+        ]);
+        $directory = $this->mock(CognitoDirectory::class);
+        $directory->shouldReceive('hasIdentity')->twice()->with('person@example.com')->andReturn(false);
+        $directory->shouldReceive('provision')->twice()->with([
+            'source' => 'cloud', 'id' => 'source-user-123', 'username' => 'person@example.com', 'email' => 'person@example.com',
+            'given_name' => 'Example', 'family_name' => "O'Sullivan",
+        ], 'password')->andReturn($username);
+
+        $service = new LegacyMigrationService($directory);
+        $this->assertSame($username, $service->resolve('person@example.com', 'password'));
+        $this->assertSame($username, $service->resolve('person@example.com', 'password'));
+        Http::assertSentCount(5);
+        $this->assertCount(1, Http::recorded(fn ($request) => $request->method() === 'GET'));
     }
 
     public function test_provider_outage_is_not_treated_as_absent_user(): void
     {
         $this->enable();
+        config(['migration.providers.cloud' => ['enabled' => true]]);
         Http::fake(['*' => Http::response([], 503)]);
         $directory = $this->mock(CognitoDirectory::class);
         $directory->shouldReceive('hasIdentity')->andReturn(false);

@@ -12,8 +12,9 @@ return [
         ],
         'cloud' => [
             'enabled' => (bool) env('MIGRATION_CLOUD_ENABLED', false),
-            'endpoint' => env('MIGRATION_CLOUD_ENDPOINT'), 
-            'token' => env('MIGRATION_CLOUD_API_TOKEN')
+            'base_url' => env('SSO_CLOUD_API_URL'),
+            'username' => env('SSO_CLOUD_API_USERNAME'),
+            'password' => env('SSO_CLOUD_API_PASSWORD'),
         ],
     ],
 ];

@@ -70,6 +70,8 @@ composer audit
 php artisan schedule:work # development; production runs Laravel's scheduler every minute
 ```
 
+Pushes and merges into `main` run [the Cloudways live workflow](.github/workflows/live-deploy.yml) using the GitHub `live` environment. It builds Vite assets, tests Laravel, syncs files over SSH/rsync, installs production Composer dependencies when needed, runs migrations and clears Laravel caches. See [Cloudways live setup and verification](docs/cloudways-live-cicd.md) for the required secrets and server configuration. Laravel stays in `private_html/app` and the web document root stays at `public_html`. Built assets and their manifest are published to both locations; the existing public `index.php` and `.htaccess` are preserved.
+
 Tests fake external calls and cover code exchange/replay/expiry, exact redirect matching, client credentials, PKCE, state, session refresh, Cognito token claims, MFA, admin authorization/write controls and migration conflicts. The scheduler removes expired encrypted authorization codes hourly. Protect `APP_KEY`, database backups and audit logs; session encryption is always enabled.
 
-Outstanding launch items: additional platform contracts and staging URLs, HTTPS deployment, live social callback/provider setup, approved management mutation tests, real legacy verification APIs and collision policy, partial-migration reconciliation, not-yet-migrated password recovery, additional MFA enrollment/selection flows, and final privacy/terms content.
+Outstanding launch items: additional platform contracts and live URLs, HTTPS deployment, live social callback/provider setup, approved management mutation tests, real legacy verification APIs and collision policy, partial-migration reconciliation, not-yet-migrated password recovery, additional MFA enrollment/selection flows, and final privacy/terms content.

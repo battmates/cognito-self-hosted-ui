@@ -1,0 +1,217 @@
+name: Deploy live
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: cloudways-live-deployment
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Upload and deploy live
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    environment: live
+
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - id: changes
+        name: Check Composer changes
+        shell: bash
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          AFTER_SHA: ${{ github.sha }}
+        run: |
+          if git cat-file -e "$BEFORE_SHA^{commit}" 2>/dev/null &&
+             git diff --quiet "$BEFORE_SHA" "$AFTER_SHA" -- composer.json composer.lock; then
+            echo "composer=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "composer=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Build frontend assets
+        run: |
+          npm ci
+          npm run build
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, pdo_mysql, pdo_sqlite
+          tools: composer:v2
+          coverage: none
+
+      - name: Install PHP dependencies and test
+        run: |
+          composer install --prefer-dist --no-interaction --no-progress
+          php artisan test
+        env:
+          APP_KEY: base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+
+      - name: Validate live configuration
+        shell: bash
+        env:
+          APP_ROOT: ${{ secrets.CLOUDWAYS_APP_PATH_LIVE }}
+          DEPLOY_HOST: ${{ secrets.CLOUDWAYS_HOST_LIVE }}
+          DEPLOY_USER: ${{ secrets.CLOUDWAYS_USER_LIVE }}
+          DEPLOY_KEY: ${{ secrets.CLOUDWAYS_KEY_LIVE }}
+        run: |
+          if [[ ! "$APP_ROOT" =~ ^/([a-zA-Z0-9_-]+/)+public_html$ ]] ||
+             [[ -z "$DEPLOY_HOST" || -z "$DEPLOY_USER" || -z "$DEPLOY_KEY" ]]; then
+            echo "Set the live SSH secrets and an absolute application path ending in /public_html (no trailing slash)."
+            exit 1
+          fi
+
+      - name: Check Cloudways application before upload
+        uses: appleboy/ssh-action@v1.2.2
+        env:
+          APP_ROOT: ${{ secrets.CLOUDWAYS_APP_PATH_LIVE }}
+        with:
+          host: ${{ secrets.CLOUDWAYS_HOST_LIVE }}
+          username: ${{ secrets.CLOUDWAYS_USER_LIVE }}
+          port: ${{ secrets.CLOUDWAYS_PORT_LIVE || '22' }}
+          key: ${{ secrets.CLOUDWAYS_KEY_LIVE }}
+          envs: APP_ROOT
+          script: |
+            set -eu
+            test -d "$APP_ROOT"
+            test -f "$APP_ROOT/index.php"
+            test -f "$APP_ROOT/.htaccess"
+            WEB_ROOT="$APP_ROOT"
+            APP_ROOT="$(dirname "$APP_ROOT")/private_html/app"
+            test -d "$APP_ROOT"
+            cd "$APP_ROOT"
+            test -f .env
+            command -v php >/dev/null
+            command -v composer >/dev/null
+            command -v rsync >/dev/null
+            mkdir -p public/build/assets "$WEB_ROOT/build/assets"
+
+      - name: Upload private build assets
+        uses: burnett01/rsync-deployments@v8
+        with:
+          switches: >-
+            -az
+          path: public/build/assets/
+          remote_path: ${{ secrets.CLOUDWAYS_APP_PATH_LIVE }}/../private_html/app/public/build/assets/
+          remote_host: ${{ secrets.CLOUDWAYS_HOST_LIVE }}
+          remote_port: ${{ secrets.CLOUDWAYS_PORT_LIVE || '22' }}
+          remote_user: ${{ secrets.CLOUDWAYS_USER_LIVE }}
+          remote_key: ${{ secrets.CLOUDWAYS_KEY_LIVE }}
+
+      - name: Upload public build assets
+        uses: burnett01/rsync-deployments@v8
+        with:
+          switches: >-
+            -az
+          path: public/build/assets/
+          remote_path: ${{ secrets.CLOUDWAYS_APP_PATH_LIVE }}/build/assets/
+          remote_host: ${{ secrets.CLOUDWAYS_HOST_LIVE }}
+          remote_port: ${{ secrets.CLOUDWAYS_PORT_LIVE || '22' }}
+          remote_user: ${{ secrets.CLOUDWAYS_USER_LIVE }}
+          remote_key: ${{ secrets.CLOUDWAYS_KEY_LIVE }}
+
+      - name: Upload private Laravel application
+        uses: burnett01/rsync-deployments@v8
+        with:
+          switches: >-
+            -az --delete
+            --exclude=.git --exclude=.github --exclude=.env --exclude=.env.*
+            --exclude=storage --exclude=vendor --exclude=node_modules --exclude=bootstrap/cache
+            --exclude=.cloudways --exclude=.vscode --exclude=.idea --exclude=.DS_Store
+            --exclude=auth.json --exclude=*.sqlite --exclude=*.sqlite-*
+            --exclude=/public/storage --exclude=/public/hot --exclude=/public/build
+          path: ./
+          remote_path: ${{ secrets.CLOUDWAYS_APP_PATH_LIVE }}/../private_html/app/
+          remote_host: ${{ secrets.CLOUDWAYS_HOST_LIVE }}
+          remote_port: ${{ secrets.CLOUDWAYS_PORT_LIVE || '22' }}
+          remote_user: ${{ secrets.CLOUDWAYS_USER_LIVE }}
+          remote_key: ${{ secrets.CLOUDWAYS_KEY_LIVE }}
+
+      - name: Upload public web files
+        uses: burnett01/rsync-deployments@v8
+        with:
+          switches: >-
+            -az --exclude=/index.php --exclude=/.htaccess
+            --exclude=/build --exclude=/storage --exclude=/hot --exclude=.DS_Store
+          path: public/
+          remote_path: ${{ secrets.CLOUDWAYS_APP_PATH_LIVE }}/
+          remote_host: ${{ secrets.CLOUDWAYS_HOST_LIVE }}
+          remote_port: ${{ secrets.CLOUDWAYS_PORT_LIVE || '22' }}
+          remote_user: ${{ secrets.CLOUDWAYS_USER_LIVE }}
+          remote_key: ${{ secrets.CLOUDWAYS_KEY_LIVE }}
+
+      - name: Install dependencies and migrate
+        uses: appleboy/ssh-action@v1.2.2
+        env:
+          APP_ROOT: ${{ secrets.CLOUDWAYS_APP_PATH_LIVE }}
+          COMPOSER_CHANGED: ${{ steps.changes.outputs.composer }}
+        with:
+          host: ${{ secrets.CLOUDWAYS_HOST_LIVE }}
+          username: ${{ secrets.CLOUDWAYS_USER_LIVE }}
+          port: ${{ secrets.CLOUDWAYS_PORT_LIVE || '22' }}
+          key: ${{ secrets.CLOUDWAYS_KEY_LIVE }}
+          envs: APP_ROOT,COMPOSER_CHANGED
+          command_timeout: 30m
+          script: |
+            set -eu
+            if [ -z "$APP_ROOT" ] || [ ! -d "$APP_ROOT" ]; then
+              echo "CLOUDWAYS_APP_PATH_LIVE is empty or does not exist."
+              exit 1
+            fi
+            APP_ROOT="$(dirname "$APP_ROOT")/private_html/app"
+            test -d "$APP_ROOT"
+            cd "$APP_ROOT"
+            mkdir -p bootstrap/cache storage/framework/cache/data storage/framework/sessions storage/framework/views storage/logs
+            test -w storage
+            test -w bootstrap/cache
+
+            if [ "$COMPOSER_CHANGED" = "true" ] || [ ! -f vendor/autoload.php ]; then
+              composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
+            fi
+
+            php artisan migrate --force
+            php artisan view:clear
+            php artisan optimize:clear
+
+      - name: Publish private build manifest
+        uses: burnett01/rsync-deployments@v8
+        with:
+          switches: >-
+            -az
+          path: public/build/manifest.json
+          remote_path: ${{ secrets.CLOUDWAYS_APP_PATH_LIVE }}/../private_html/app/public/build/
+          remote_host: ${{ secrets.CLOUDWAYS_HOST_LIVE }}
+          remote_port: ${{ secrets.CLOUDWAYS_PORT_LIVE || '22' }}
+          remote_user: ${{ secrets.CLOUDWAYS_USER_LIVE }}
+          remote_key: ${{ secrets.CLOUDWAYS_KEY_LIVE }}
+
+      - name: Publish public build manifest
+        uses: burnett01/rsync-deployments@v8
+        with:
+          switches: >-
+            -az
+          path: public/build/manifest.json
+          remote_path: ${{ secrets.CLOUDWAYS_APP_PATH_LIVE }}/build/
+          remote_host: ${{ secrets.CLOUDWAYS_HOST_LIVE }}
+          remote_port: ${{ secrets.CLOUDWAYS_PORT_LIVE || '22' }}
+          remote_user: ${{ secrets.CLOUDWAYS_USER_LIVE }}
+          remote_key: ${{ secrets.CLOUDWAYS_KEY_LIVE }}
+

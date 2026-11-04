@@ -21,7 +21,7 @@ class CognitoIdentityService
     {
         app(LoginProgress::class)->report('cognito', 'Checking your RSL single sign-on account.', 12);
         if (config('migration.enabled')) {
-            $username = app(LegacyMigrationService::class)->resolve($username, $password);
+            $username = app(LegacyMigrationService::class)->resolve($username, $password, $context);
         }
         app(LoginProgress::class)->report('authenticate', 'Verifying your sign-in and preparing secure access.', 92);
         $payload = $this->call('InitiateAuth', [

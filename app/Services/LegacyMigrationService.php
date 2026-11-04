@@ -12,7 +12,7 @@ class LegacyMigrationService
 {
     public function __construct(private readonly CognitoDirectory $directory) {}
 
-    public function resolve(string $identifier, string $password): string
+    public function resolve(string $identifier, string $password, array $context = []): string
     {
         if (! config('migration.enabled')) {
             return $identifier;
@@ -23,24 +23,23 @@ class LegacyMigrationService
         if (! config('sso.management_writes_enabled')) {
             throw new RuntimeException('Account migration is not available yet. Please contact support.');
         }
-        foreach (['wordpress', 'cloud'] as $name) {
+        // The consumer comes from the broker's validated application journey.
+        $order = ($context['consumer'] ?? null) === 'musicteacher' ? ['wordpress', 'cloud'] : ['cloud', 'wordpress'];
+        $providers = array_values(array_filter($order, fn ($name) => config('migration.providers.'.$name.'.enabled', false)));
+        foreach ($providers as $position => $name) {
             $provider = config('migration.providers.'.$name, []);
-            if (! ($provider['enabled'] ?? false)) {
-                continue;
-            }
+            $label = $name === 'wordpress' ? 'MusicTeacher' : 'RSL Cloud';
             app(LoginProgress::class)->report(
                 $name,
-                $name === 'wordpress'
-                    ? 'No matching single sign-on account. Checking MusicTeacher.'
-                    : 'Checking your RSL Cloud account for a matching sign-in.',
-                $name === 'wordpress' ? 35 : 60,
+                ($position === 0 ? 'No matching single sign-on account. ' : '').'Checking '.$label.' for a matching sign-in.',
+                $position === 0 ? 35 : 60,
             );
             $identity = $this->verify($name, $provider, $identifier, $password);
             if (! $identity) {
                 app(LoginProgress::class)->report(
                     $name.'-no-match',
                     $name === 'wordpress' ? 'No matching MusicTeacher sign-in found.' : 'No matching RSL Cloud sign-in found.',
-                    $name === 'wordpress' ? 45 : 70,
+                    $position === 0 ? 45 : 70,
                 );
 
                 continue;
@@ -127,19 +126,19 @@ class LegacyMigrationService
                 default => throw new RuntimeException('Legacy account verification is not configured. Please contact support.'),
             };
         } catch (ConnectionException) {
-            Log::warning('portal.legacy.verification.failed', ['source' => 'wordpress', 'reason' => 'connection', 'http_status' => null]);
+            Log::error('portal.legacy.verification.failed', ['source' => 'wordpress', 'reason' => 'connection', 'http_status' => null]);
             throw new RuntimeException('Legacy account verification is unavailable. Please try again later.');
         }
         if (in_array($response->status(), [401, 404], true)) {
             return null;
         }
         if (! $response->ok()) {
-            Log::warning('portal.legacy.verification.failed', ['source' => 'wordpress', 'reason' => 'http_error', 'http_status' => $response->status()]);
+            Log::error('portal.legacy.verification.failed', ['source' => 'wordpress', 'reason' => 'http_error', 'http_status' => $response->status()]);
             throw new RuntimeException('Legacy account verification is unavailable. Please try again later.');
         }
         $data = $response->json();
         if (! is_array($data)) {
-            Log::warning('portal.legacy.verification.failed', ['source' => 'wordpress', 'reason' => 'invalid_response', 'http_status' => $response->status()]);
+            Log::error('portal.legacy.verification.failed', ['source' => 'wordpress', 'reason' => 'invalid_response', 'http_status' => $response->status()]);
             throw new RuntimeException('Legacy account verification returned an invalid response.');
         }
         // Some WordPress installations return an explicit no-match with HTTP 200.

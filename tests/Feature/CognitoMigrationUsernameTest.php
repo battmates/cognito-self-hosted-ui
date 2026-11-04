@@ -158,7 +158,7 @@ class CognitoMigrationUsernameTest extends TestCase
             $this->assertNull($exception->getPrevious());
         }
 
-        Log::shouldHaveReceived('warning')->once()->with('portal.migration.failed', [
+        Log::shouldHaveReceived('error')->once()->with('portal.migration.failed', [
             'operation' => 'AdminCreateUser', 'aws_error' => 'InvalidPasswordException', 'aws_request_id' => null,
             'username_hash' => hash('sha256', 'aaron.osullivan'), 'account_created' => false,
         ]);

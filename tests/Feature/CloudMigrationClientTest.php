@@ -100,7 +100,7 @@ class CloudMigrationClientTest extends TestCase
     {
         Http::fake([
             'https://cloud.example.test/Account/generate-token*' => Http::response(['Token' => 'cached-bearer', 'ExpireTime' => now()->addHour()->toIso8601String()]),
-            'https://cloud.example.test/backstage/ssoauthenticate' => Http::response([], 401),
+            'https://cloud.example.test/backstage/ssoauthenticate' => Http::response([], 401, ['WWW-Authenticate' => 'Bearer error="invalid_token"']),
         ]);
         for ($attempt = 0; $attempt < 2; $attempt++) {
             try {
@@ -113,13 +113,53 @@ class CloudMigrationClientTest extends TestCase
         Http::assertSentCount(3);
     }
 
+    public function test_explicit_negative_account_result_with_401_allows_fallback(): void
+    {
+        Http::fake([
+            'https://cloud.example.test/Account/generate-token*' => Http::response(['Token' => 'cached-bearer', 'ExpireTime' => now()->addHour()->toIso8601String()]),
+            'https://cloud.example.test/backstage/ssoauthenticate' => Http::response(['authenticated' => false, 'user' => null], 401),
+        ]);
+        $this->assertNull((new CloudMigrationClient)->authenticate($this->provider(), 'person@example.com', 'password'));
+        Http::assertSentCount(2);
+    }
+
+    public function test_plain_401_without_a_service_challenge_is_a_no_match(): void
+    {
+        Http::fake([
+            'https://cloud.example.test/Account/generate-token*' => Http::response(['Token' => 'cached-bearer', 'ExpireTime' => now()->addHour()->toIso8601String()]),
+            'https://cloud.example.test/backstage/ssoauthenticate' => Http::response(['message' => 'Invalid credentials.'], 401),
+        ]);
+
+        $this->assertNull((new CloudMigrationClient)->authenticate($this->provider(), 'missing@example.com', 'password'));
+        Http::assertSentCount(2);
+    }
+
+    public function test_bearer_challenge_is_not_treated_as_an_account_no_match(): void
+    {
+        Log::spy();
+        Http::fake([
+            'https://cloud.example.test/Account/generate-token*' => Http::response(['Token' => 'cached-bearer', 'ExpireTime' => now()->addHour()->toIso8601String()]),
+            'https://cloud.example.test/backstage/ssoauthenticate' => Http::response(['authenticated' => false, 'user' => null], 401, ['WWW-Authenticate' => 'Bearer error="invalid_token"']),
+        ]);
+        try {
+            (new CloudMigrationClient)->authenticate($this->provider(), 'person@example.com', 'password');
+            $this->fail('A rejected service token must stop verification.');
+        } catch (RuntimeException $exception) {
+            $this->assertStringContainsString('Cloud account verification is unavailable', $exception->getMessage());
+        }
+        Log::shouldHaveReceived('error')->with('portal.cloud.authorization.rejected', [
+            'authenticated_false' => true, 'user_is_null' => true, 'bearer_challenge' => true, 'challenge_error' => 'invalid_token',
+        ])->once();
+        Http::assertSentCount(2);
+    }
+
     #[DataProvider('verificationFailureStatuses')]
     public function test_verification_failure_logs_status_without_credentials_or_response_body(int $status): void
     {
         Log::spy();
         Http::fake([
             'https://cloud.example.test/Account/generate-token*' => Http::response(['Token' => 'private-bearer', 'ExpireTime' => now()->addHour()->toIso8601String()]),
-            'https://cloud.example.test/backstage/ssoauthenticate' => Http::response(['message' => 'Private response with person@example.com and user-password'], $status),
+            'https://cloud.example.test/backstage/ssoauthenticate' => Http::response(['message' => 'Private response with person@example.com and user-password'], $status, $status === 401 ? ['WWW-Authenticate' => 'Bearer error="invalid_token"'] : []),
         ]);
         try {
             (new CloudMigrationClient)->authenticate($this->provider(), 'person@example.com', 'user-password');
@@ -128,7 +168,7 @@ class CloudMigrationClientTest extends TestCase
             $this->assertSame('Cloud account verification is unavailable. Please try again later.', $exception->getMessage());
             $this->assertNull($exception->getPrevious());
         }
-        Log::shouldHaveReceived('warning')->once()->with('portal.cloud.verification.failed', ['reason' => 'http_error', 'http_status' => $status]);
+        Log::shouldHaveReceived('error')->with('portal.cloud.verification.failed', ['reason' => 'http_error', 'http_status' => $status])->once();
         Http::assertSentCount(2);
     }
 
@@ -150,7 +190,7 @@ class CloudMigrationClientTest extends TestCase
         } catch (RuntimeException $exception) {
             $this->assertNull($exception->getPrevious());
         }
-        Log::shouldHaveReceived('warning')->once()->with('portal.cloud.verification.failed', ['reason' => 'connection', 'http_status' => null]);
+        Log::shouldHaveReceived('error')->once()->with('portal.cloud.verification.failed', ['reason' => 'connection', 'http_status' => null]);
     }
 
     public function test_token_generation_rechecks_the_cache_after_taking_the_lock(): void

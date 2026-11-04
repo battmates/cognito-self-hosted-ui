@@ -80,7 +80,7 @@ class LegacyMigrationTest extends TestCase
         $directory = $this->mock(CognitoDirectory::class);
         $directory->shouldReceive('resolveUsername')->andReturn(null);
         $directory->shouldReceive('provision')->once()->with(Mockery::on(fn ($identity) => $identity['source'] === 'cloud'), 'password')->andReturn('legacy-user');
-        $this->assertSame('legacy-user', (new LegacyMigrationService($directory))->resolve('person@example.com', 'password'));
+        $this->assertSame('legacy-user', (new LegacyMigrationService($directory))->resolve('person@example.com', 'password', ['consumer' => 'musicteacher']));
         Http::assertSentCount(3);
         Http::assertSent(fn ($request) => $request->url() === 'https://cloud.example.com/backstage/ssoauthenticate'
             && $request['identifier'] === 'person@example.com' && $request->hasHeader('Authorization', 'Bearer cloud-token'));
@@ -96,6 +96,35 @@ class LegacyMigrationTest extends TestCase
         ];
     }
 
+    #[DataProvider('cloudFirstContexts')]
+    public function test_cloud_no_match_falls_back_to_musicteacher_for_other_applications(array $context, int $status = 200): void
+    {
+        $this->enable();
+        config(['migration.providers.cloud' => ['enabled' => true, 'base_url' => 'https://cloud.example.com', 'username' => 'service-user', 'password' => 'service-password']]);
+        Http::fake([
+            'https://cloud.example.com/Account/generate-token*' => Http::response(['Token' => 'cloud-token', 'ExpireTime' => now()->addHour()->toIso8601String()]),
+            'https://cloud.example.com/backstage/ssoauthenticate' => Http::response(['authenticated' => false, 'user' => null], $status),
+            'https://legacy.example.com/verify' => Http::response($this->wordpressIdentity()),
+        ]);
+        $directory = $this->mock(CognitoDirectory::class);
+        $directory->shouldReceive('resolveUsername')->andReturn(null);
+        $directory->shouldReceive('provision')->once()->with(Mockery::on(fn ($identity) => $identity['source'] === 'wordpress'), 'password')->andReturn('wp_123');
+
+        $this->assertSame('wp_123', (new LegacyMigrationService($directory))->resolve('person@example.com', 'password', $context));
+        $this->assertSame(['/Account/generate-token', '/backstage/ssoauthenticate', '/verify'], Http::recorded()->map(fn ($pair) => parse_url($pair[0]->url(), PHP_URL_PATH))->all());
+    }
+
+    public static function cloudFirstContexts(): array
+    {
+        return [
+            'direct' => [[]],
+            'direct with explicit 401 no match' => [[], 401],
+            'Cloud' => [['consumer' => 'cloud']],
+            'Backstage' => [['consumer' => 'backstage']],
+            'Guestlist' => [['consumer' => 'guestlist']],
+        ];
+    }
+
     public function test_wordpress_success_is_verified_once_and_skips_cloud(): void
     {
         $this->enable();
@@ -105,7 +134,7 @@ class LegacyMigrationTest extends TestCase
         $directory->shouldReceive('resolveUsername')->andReturn(null);
         $directory->shouldReceive('provision')->once()->andReturn('wp_123');
 
-        $this->assertSame('wp_123', (new LegacyMigrationService($directory))->resolve('person@example.com', 'password'));
+        $this->assertSame('wp_123', (new LegacyMigrationService($directory))->resolve('person@example.com', 'password', ['consumer' => 'musicteacher']));
         Http::assertSentCount(1);
     }
 
@@ -135,8 +164,9 @@ class LegacyMigrationTest extends TestCase
         $service = new LegacyMigrationService($directory);
         $this->assertSame($username, $service->resolve('person@example.com', 'password'));
         $this->assertSame($username, $service->resolve('person@example.com', 'password'));
-        Http::assertSentCount(5);
+        Http::assertSentCount(3);
         $this->assertCount(1, Http::recorded(fn ($request) => $request->method() === 'GET'));
+        Http::assertNotSent(fn ($request) => $request->url() === 'https://legacy.example.com/verify');
     }
 
     public function test_provider_outage_is_not_treated_as_absent_user(): void
@@ -149,12 +179,12 @@ class LegacyMigrationTest extends TestCase
         $directory->shouldReceive('resolveUsername')->andReturn(null);
         $directory->shouldNotReceive('provision');
         try {
-            (new LegacyMigrationService($directory))->resolve('person@example.com', 'password');
+            (new LegacyMigrationService($directory))->resolve('person@example.com', 'password', ['consumer' => 'musicteacher']);
             $this->fail('A provider outage must stop migration.');
         } catch (\RuntimeException $exception) {
             $this->assertStringContainsString('Legacy account verification is unavailable', $exception->getMessage());
         }
-        Log::shouldHaveReceived('warning')->once()->with('portal.legacy.verification.failed', ['source' => 'wordpress', 'reason' => 'http_error', 'http_status' => 503]);
+        Log::shouldHaveReceived('error')->once()->with('portal.legacy.verification.failed', ['source' => 'wordpress', 'reason' => 'http_error', 'http_status' => 503]);
         Http::assertSentCount(1);
     }
 
@@ -173,7 +203,7 @@ class LegacyMigrationTest extends TestCase
             $this->assertStringContainsString('Legacy account verification is unavailable', $exception->getMessage());
             $this->assertNull($exception->getPrevious());
         }
-        Log::shouldHaveReceived('warning')->once()->with('portal.legacy.verification.failed', ['source' => 'wordpress', 'reason' => 'connection', 'http_status' => null]);
+        Log::shouldHaveReceived('error')->once()->with('portal.legacy.verification.failed', ['source' => 'wordpress', 'reason' => 'connection', 'http_status' => null]);
     }
 
     public function test_unverified_legacy_email_cannot_create_verified_cognito_account(): void

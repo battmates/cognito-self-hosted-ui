@@ -314,7 +314,7 @@ class CognitoDirectory
     private function migrationFailure(AwsException $exception, string $operation, string $username, string $fallback): RuntimeException
     {
         // Never log the exception or request: they can contain passwords and attributes.
-        Log::warning('portal.migration.failed', [
+        Log::error('portal.migration.failed', [
             'operation' => $operation,
             'aws_error' => $exception->getAwsErrorCode(),
             'aws_request_id' => $exception->getAwsRequestId(),

@@ -30,26 +30,40 @@ class CloudMigrationClient
                 ->connectTimeout(5)->timeout(15)->withoutRedirecting()
                 ->post($baseUrl.'/backstage/ssoauthenticate', ['identifier' => $identifier, 'password' => $password]);
         } catch (ConnectionException) {
-            Log::warning('portal.cloud.verification.failed', ['reason' => 'connection', 'http_status' => null]);
+            Log::error('portal.cloud.verification.failed', ['reason' => 'connection', 'http_status' => null]);
             throw new RuntimeException('Cloud account verification is unavailable. Please try again later.');
         }
 
         // An unexpected authorization failure must not generate a new token on
         // every login attempt. The cached token remains valid until ExpireTime.
-        if ($response->status() === 404) {
+        if ($response->status() === 404 || ($response->status() === 401 && ! $response->header('WWW-Authenticate'))) {
+            return null;
+        }
+        $data = $response->json();
+        // Cloud uses 401 for unmatched login details; a WWW-Authenticate
+        // challenge identifies a service authorization failure instead.
+        if ($response->status() === 200
+            && is_array($data) && ($data['authenticated'] ?? null) === false
+            && array_key_exists('user', $data) && $data['user'] === null) {
             return null;
         }
         if (! $response->ok()) {
+            if ($response->status() === 401) {
+                $challenge = (string) $response->header('WWW-Authenticate');
+                preg_match('/\berror="?(invalid_token|invalid_request|insufficient_scope)\b/', $challenge, $error);
+                Log::error('portal.cloud.authorization.rejected', [
+                    'authenticated_false' => is_array($data) && ($data['authenticated'] ?? null) === false,
+                    'user_is_null' => is_array($data) && array_key_exists('user', $data) && $data['user'] === null,
+                    'bearer_challenge' => $challenge !== '',
+                    'challenge_error' => $error[1] ?? null,
+                ]);
+            }
             // Never log the response body, request or exception: they may contain credentials.
-            Log::warning('portal.cloud.verification.failed', ['reason' => 'http_error', 'http_status' => $response->status()]);
+            Log::error('portal.cloud.verification.failed', ['reason' => 'http_error', 'http_status' => $response->status()]);
             throw new RuntimeException('Cloud account verification is unavailable. Please try again later.');
         }
-        $data = $response->json();
-        if (is_array($data) && ($data['authenticated'] ?? null) === false && array_key_exists('user', $data) && $data['user'] === null) {
-            return null;
-        }
         if (! is_array($data)) {
-            Log::warning('portal.cloud.verification.failed', ['reason' => 'invalid_response', 'http_status' => $response->status()]);
+            Log::error('portal.cloud.verification.failed', ['reason' => 'invalid_response', 'http_status' => $response->status()]);
             throw new RuntimeException('Cloud account verification returned an invalid response.');
         }
 

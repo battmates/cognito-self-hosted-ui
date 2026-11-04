@@ -26,6 +26,45 @@ The existing staging configuration already supports direct password and refresh-
 
 Run `composer run dev` for the full Laravel/Vite stack, or `php artisan serve` after building assets.
 
+## Docker
+
+Docker Compose uses the existing `.env` for the web app, queue worker and scheduler. Keep the same `APP_KEY`, Cognito, AWS, database, session and migration settings. The `.env` file and local credentials are excluded from the image; frontend assets and production PHP dependencies are built into it. Node and Composer are not required on the host.
+
+```sh
+docker compose build
+# Run once on initial setup, and when deploying new database migrations:
+docker compose run --rm app php artisan migrate --force
+docker compose up -d
+```
+
+Open `http://localhost:8000` (or the hostname configured in `APP_URL`). Set `DOCKER_PORT` in `.env` to change the published port, and update `APP_URL` and any explicitly configured callback URLs to match. Cognito callbacks must remain registered with Cognito. For a fresh installation only, copy `.env.example` to `.env` and generate a key with `docker compose run --rm app php artisan key:generate --show`, then save that value as `APP_KEY` in `.env` before migrating. Existing installations must retain their key.
+
+For a local MySQL database, set `DB_HOST=database` and `COMPOSE_PROFILES=local-db` in `.env`. Keep your existing `DB_DATABASE`, `DB_USERNAME` and `DB_PASSWORD` (a non-root username and a non-empty password are required). Start and initialize it before the application:
+
+```sh
+docker compose up -d --wait database
+docker compose run --rm app php artisan migrate --force
+docker compose up -d
+```
+
+This creates a separate, initially empty MySQL 8.4 database in the `mysql-data` volume. It does not import an existing database. The credentials initialize MySQL on its first startup; changing them later requires updating the MySQL account too. MySQL is available only to containers, with no database port published to the host.
+
+To use an existing database instead, remove `COMPOSE_PROFILES=local-db` and configure `DB_HOST` for that server. A database, Redis or mail server on the host must use `host.docker.internal` instead of `127.0.0.1` on Docker Desktop; Linux hosts need an equivalent reachable address. Remote server hostnames stay the same. Ensure the database accepts connections from the Docker host. MySQL/MariaDB, PostgreSQL, SQLite and Redis PHP drivers are included. Migrations always remain an explicit command.
+
+The `app-storage` volume preserves logs, uploads, file sessions/cache and the default SQLite database across container replacements. An existing host SQLite database is not imported automatically. If you explicitly set an SQLite `DB_DATABASE`, use an absolute container path inside `/var/www/html/storage` for persistence and provide the existing database there. `docker compose down` preserves the volume; `docker compose down -v` deletes it. The application's existing environment variables control session/cache drivers as usual.
+
+```sh
+docker compose ps
+docker compose logs -f app queue scheduler
+# Apply .env changes to all services:
+docker compose up -d --force-recreate
+# Rebuild after source changes:
+docker compose up -d --build
+docker compose down
+```
+
+For an HTTPS deployment, put the web service behind your HTTPS proxy and use the existing production settings (`APP_ENV=production`, `APP_DEBUG=false`, the HTTPS `APP_URL`, and `SESSION_SECURE_COOKIE=true`). The scheduler runs the existing hourly authorization-code cleanup; the queue worker processes the configured queue connection.
+
 ## Application compatibility
 
 | Existing application request | Portal behavior |

@@ -28,7 +28,7 @@ Create or use **Settings → Environments → live** and allow only `main` if de
 | `CLOUDWAYS_USER_LIVE` | Application SSH username with access to both directories |
 | `CLOUDWAYS_KEY_LIVE` | Full unencrypted private deployment key authorized for that user |
 
-The private application path is derived from the public path: `<public_html>/../private_html/app`. No extra path secret is needed. Do not set `CLOUDWAYS_APP_PATH_LIVE` to the private directory or `public_html/public`. Directory names must contain only letters, digits, underscores and hyphens. Keep the private key only in GitHub secrets and authorize its public key on Cloudways. No SFTP password or Cloudways API key is used. Local `.cloudways`, `.env` and `.vscode` files are excluded from deployment.
+The private application path is derived from the public path: `<public_html>/../private_html/app`. No extra path secret is needed. Do not set `CLOUDWAYS_APP_PATH_LIVE` to the private directory or `public_html/public`. Directory names may contain letters, digits, dots, underscores and hyphens; relative `.` and `..` components are rejected. Keep the private key only in GitHub secrets and authorize its public key on Cloudways. No SFTP password or Cloudways API key is used. Local `.cloudways`, `.env` and `.vscode` files are excluded from deployment.
 
 ## Prepare Cloudways
 

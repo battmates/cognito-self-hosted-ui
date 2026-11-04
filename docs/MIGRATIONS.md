@@ -16,7 +16,7 @@ SSO_CLOUD_API_USERNAME=your-service-account
 SSO_CLOUD_API_PASSWORD="your-service-password"
 ```
 
-The portal calls `GET /generate-token` with `userName` and `password` from the service account. The response must contain a nonempty `Token` and a future absolute `ExpireTime`, for example `2026-11-01T11:50:31+00:00`. The returned `URL` is ignored; requests always use the configured base URL. Credentials in this GET query must be redacted from infrastructure request logs.
+The portal calls `GET /Account/generate-token` with `userName` and `password` from the service account. The response must contain a nonempty `Token` and a future absolute `ExpireTime`, for example `2026-11-01T11:50:31+00:00`. The returned `URL` is ignored; requests always use the configured base URL. Credentials in this GET query must be redacted from infrastructure request logs.
 
 The bearer token is encrypted in Laravel's cache until `ExpireTime`. It is shared across users and requests, scoped to the base URL and service credentials. A cache lock and a second cache check prevent concurrent requests from generating duplicate tokens. Use a persistent shared cache store for multiple application instances; the `array` store is suitable only for tests. A failed authentication request does not regenerate an unexpired token.
 

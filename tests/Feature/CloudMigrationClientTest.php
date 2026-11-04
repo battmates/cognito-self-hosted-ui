@@ -20,7 +20,7 @@ class CloudMigrationClientTest extends TestCase
     private function fakeCloud(array $tokenOverrides = []): void
     {
         Http::fake([
-            'https://cloud.example.test/generate-token*' => fn () => Http::response(array_merge([
+            'https://cloud.example.test/Account/generate-token*' => fn () => Http::response(array_merge([
                 'Token' => 'cached-bearer', 'URL' => 'https://untrusted.example.test/',
                 'CreatedTime' => now()->toIso8601String(), 'ExpireTime' => now()->addHour()->toIso8601String(),
             ], $tokenOverrides)),
@@ -36,7 +36,7 @@ class CloudMigrationClientTest extends TestCase
         $this->travel(59)->minutes();
         $this->assertNull((new CloudMigrationClient)->authenticate($this->provider(), 'second@example.com', 'second-password'));
         Http::assertSentCount(3);
-        Http::assertSent(fn ($request) => $request->method() === 'GET' && $request['userName'] === 'service-user' && $request['password'] === 'service-password');
+        Http::assertSent(fn ($request) => $request->method() === 'GET' && parse_url($request->url(), PHP_URL_PATH) === '/Account/generate-token' && $request['userName'] === 'service-user' && $request['password'] === 'service-password');
         Http::assertSent(fn ($request) => $request->method() === 'POST' && $request['identifier'] === 'second@example.com' && $request['password'] === 'second-password' && $request->hasHeader('Authorization', 'Bearer cached-bearer'));
         Http::assertNotSent(fn ($request) => str_contains($request->url(), 'untrusted.example.test'));
 
@@ -84,7 +84,7 @@ class CloudMigrationClientTest extends TestCase
 
     public function test_token_connection_failure_does_not_expose_service_credentials(): void
     {
-        Http::fake(fn () => throw new ConnectionException('https://cloud.example.test/generate-token?userName=service-user&password=service-password'));
+        Http::fake(fn () => throw new ConnectionException('https://cloud.example.test/Account/generate-token?userName=service-user&password=service-password'));
         try {
             (new CloudMigrationClient)->authenticate($this->provider(), 'person@example.com', 'password');
             $this->fail('A connection failure must stop authentication.');
@@ -97,7 +97,7 @@ class CloudMigrationClientTest extends TestCase
     public function test_authorization_failure_does_not_request_token_again_before_expiry(): void
     {
         Http::fake([
-            'https://cloud.example.test/generate-token*' => Http::response(['Token' => 'cached-bearer', 'ExpireTime' => now()->addHour()->toIso8601String()]),
+            'https://cloud.example.test/Account/generate-token*' => Http::response(['Token' => 'cached-bearer', 'ExpireTime' => now()->addHour()->toIso8601String()]),
             'https://cloud.example.test/backstage/ssoauthenticate' => Http::response([], 401),
         ]);
         for ($attempt = 0; $attempt < 2; $attempt++) {

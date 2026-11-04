@@ -67,7 +67,7 @@ class CloudMigrationClient
                 }
                 try {
                     $response = Http::acceptJson()->connectTimeout(5)->timeout(15)->withoutRedirecting()
-                        ->get($baseUrl.'/generate-token', ['userName' => $username, 'password' => $password]);
+                        ->get($baseUrl.'/Account/generate-token', ['userName' => $username, 'password' => $password]);
                 } catch (ConnectionException) {
                     // Do not expose the GET request URL, which contains credentials.
                     throw new RuntimeException('Cloud token service is unavailable. Please try again later.');

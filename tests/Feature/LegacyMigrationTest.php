@@ -70,7 +70,7 @@ class LegacyMigrationTest extends TestCase
         config(['migration.providers.cloud' => ['enabled' => true, 'base_url' => 'https://cloud.example.com', 'username' => 'service-user', 'password' => 'service-password']]);
         Http::fake([
             'https://legacy.example.com/verify' => Http::response(['ok' => false], 401),
-            'https://cloud.example.com/generate-token*' => Http::response(['Token' => 'cloud-token', 'ExpireTime' => now()->addHour()->toIso8601String()]),
+            'https://cloud.example.com/Account/generate-token*' => Http::response(['Token' => 'cloud-token', 'ExpireTime' => now()->addHour()->toIso8601String()]),
             'https://cloud.example.com/backstage/ssoauthenticate' => Http::response($this->identity()),
         ]);
         $directory = $this->mock(CognitoDirectory::class);
@@ -102,7 +102,7 @@ class LegacyMigrationTest extends TestCase
         $username = 'example.osullivan';
         Http::fake([
             'https://legacy.example.com/verify' => Http::response([], 404),
-            'https://cloud.example.com/generate-token*' => Http::response(['Token' => 'cloud-token', 'ExpireTime' => now()->addHour()->toIso8601String()]),
+            'https://cloud.example.com/Account/generate-token*' => Http::response(['Token' => 'cloud-token', 'ExpireTime' => now()->addHour()->toIso8601String()]),
             'https://cloud.example.com/backstage/ssoauthenticate' => Http::response([
                 'authenticated' => true,
                 'user' => [
@@ -142,7 +142,7 @@ class LegacyMigrationTest extends TestCase
         $this->enable();
         config(['migration.providers' => ['cloud' => ['enabled' => true, 'base_url' => 'https://cloud.example.com', 'username' => 'service-user', 'password' => 'service-password']]]);
         Http::fake([
-            'https://cloud.example.com/generate-token*' => Http::response(['Token' => 'cloud-token', 'ExpireTime' => now()->addHour()->toIso8601String()]),
+            'https://cloud.example.com/Account/generate-token*' => Http::response(['Token' => 'cloud-token', 'ExpireTime' => now()->addHour()->toIso8601String()]),
             'https://cloud.example.com/backstage/ssoauthenticate' => Http::response($this->identity(['email_verified' => false])),
         ]);
         $directory = $this->mock(CognitoDirectory::class);

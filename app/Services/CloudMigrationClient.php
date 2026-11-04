@@ -10,6 +10,7 @@ use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 class CloudMigrationClient
@@ -29,6 +30,7 @@ class CloudMigrationClient
                 ->connectTimeout(5)->timeout(15)->withoutRedirecting()
                 ->post($baseUrl.'/backstage/ssoauthenticate', ['identifier' => $identifier, 'password' => $password]);
         } catch (ConnectionException) {
+            Log::warning('portal.cloud.verification.failed', ['reason' => 'connection', 'http_status' => null]);
             throw new RuntimeException('Cloud account verification is unavailable. Please try again later.');
         }
 
@@ -38,6 +40,8 @@ class CloudMigrationClient
             return null;
         }
         if (! $response->ok()) {
+            // Never log the response body, request or exception: they may contain credentials.
+            Log::warning('portal.cloud.verification.failed', ['reason' => 'http_error', 'http_status' => $response->status()]);
             throw new RuntimeException('Cloud account verification is unavailable. Please try again later.');
         }
         $data = $response->json();
@@ -45,6 +49,7 @@ class CloudMigrationClient
             return null;
         }
         if (! is_array($data)) {
+            Log::warning('portal.cloud.verification.failed', ['reason' => 'invalid_response', 'http_status' => $response->status()]);
             throw new RuntimeException('Cloud account verification returned an invalid response.');
         }
 

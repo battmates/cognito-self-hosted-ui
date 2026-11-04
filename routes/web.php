@@ -7,10 +7,19 @@ use App\Http\Controllers\OAuthController;
 use App\Http\Controllers\SesWebhookController;
 use App\Http\Middleware\PortalSession;
 use App\Http\Middleware\RequirePortalAdmin;
+use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
+use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Route;
+use Illuminate\View\Middleware\ShareErrorsFromSession;
 
 Route::post('/oauth2/token', [OAuthController::class, 'token'])->middleware('throttle:60,1');
 Route::post('/webhooks/ses-events', [SesWebhookController::class, 'handle'])->middleware('throttle:120,1')->name('portal.webhooks.ses-events');
+
+// Polling is stateless: it must not overwrite a concurrent login's session.
+Route::get('/login/progress/{attempt}', [AuthPortalController::class, 'loginProgress'])
+    ->whereUuid('attempt')->middleware('signed')
+    ->withoutMiddleware([StartSession::class, ShareErrorsFromSession::class, ValidateCsrfToken::class])
+    ->name('portal.login.progress');
 
 Route::middleware(PortalSession::class)->group(function () {
 

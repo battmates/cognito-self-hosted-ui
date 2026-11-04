@@ -7,6 +7,7 @@ use Aws\CognitoIdentityProvider\CognitoIdentityProviderClient;
 use Aws\Command;
 use Aws\Exception\AwsException;
 use Aws\Result;
+use Illuminate\Support\Facades\Log;
 use Mockery;
 use RuntimeException;
 use Tests\TestCase;
@@ -135,6 +136,43 @@ class CognitoMigrationUsernameTest extends TestCase
         $client->shouldReceive('adminCreateUser')->once()->andReturn(new Result);
         $client->shouldReceive('adminSetUserPassword')->once()->andThrow(new AwsException('Unavailable', new Command('AdminSetUserPassword'), ['code' => 'InternalErrorException']));
         $this->expectExceptionMessage('Account migration could not be completed.');
+
+        $directory->provision($this->identity(), 'Password123!');
+    }
+
+    public function test_password_policy_failure_is_actionable_and_logs_only_safe_diagnostics(): void
+    {
+        Log::spy();
+        $client = $this->mock(CognitoIdentityProviderClient::class);
+        $directory = $this->directory($client);
+        $directory->shouldReceive('hasIdentity')->with('person@example.com')->once()->andReturn(false);
+        $directory->shouldReceive('hasIdentity')->with('aaron.osullivan')->once()->andReturn(false);
+        $client->shouldReceive('adminCreateUser')->once()->andThrow(new AwsException('Sensitive request: password=private-password person@example.com', new Command('AdminCreateUser'), ['code' => 'InvalidPasswordException']));
+        $client->shouldNotReceive('adminSetUserPassword');
+
+        try {
+            $directory->provision($this->identity(), 'private-password');
+            $this->fail('Password policy rejection must stop migration.');
+        } catch (RuntimeException $exception) {
+            $this->assertStringContainsString('Reset it on the original platform', $exception->getMessage());
+            $this->assertNull($exception->getPrevious());
+        }
+
+        Log::shouldHaveReceived('warning')->once()->with('portal.migration.failed', [
+            'operation' => 'AdminCreateUser', 'aws_error' => 'InvalidPasswordException', 'aws_request_id' => null,
+            'username_hash' => hash('sha256', 'aaron.osullivan'), 'account_created' => false,
+        ]);
+    }
+
+    public function test_migration_permission_failure_explains_the_configuration_problem(): void
+    {
+        $client = $this->mock(CognitoIdentityProviderClient::class);
+        $directory = $this->directory($client);
+        $directory->shouldReceive('hasIdentity')->with('person@example.com')->once()->andReturn(false);
+        $directory->shouldReceive('hasIdentity')->with('aaron.osullivan')->once()->andReturn(false);
+        $client->shouldReceive('adminCreateUser')->once()->andThrow(new AwsException('Denied', new Command('AdminCreateUser'), ['code' => 'AccessDeniedException']));
+        $client->shouldNotReceive('adminSetUserPassword');
+        $this->expectExceptionMessage('AWS credentials do not allow account migration');
 
         $directory->provision($this->identity(), 'Password123!');
     }

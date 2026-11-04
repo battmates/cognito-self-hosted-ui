@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -27,8 +28,21 @@ class LegacyMigrationService
             if (! ($provider['enabled'] ?? false)) {
                 continue;
             }
+            app(LoginProgress::class)->report(
+                $name,
+                $name === 'wordpress'
+                    ? 'No matching single sign-on account. Checking MusicTeacher.'
+                    : 'Checking your RSL Cloud account for a matching sign-in.',
+                $name === 'wordpress' ? 35 : 60,
+            );
             $identity = $this->verify($name, $provider, $identifier, $password);
             if (! $identity) {
+                app(LoginProgress::class)->report(
+                    $name.'-no-match',
+                    $name === 'wordpress' ? 'No matching MusicTeacher sign-in found.' : 'No matching RSL Cloud sign-in found.',
+                    $name === 'wordpress' ? 45 : 70,
+                );
+
                 continue;
             }
             foreach (array_unique([$identity['username'], $identity['email']]) as $poolIdentifier) {
@@ -47,6 +61,7 @@ class LegacyMigrationService
     {
         // Different username/email entry points for the same person share a lock.
         return Cache::lock('portal.migrate.'.hash('sha256', strtolower($identity['email'])), 60)->block(3, function () use ($identity, $password) {
+            app(LoginProgress::class)->report('migration', 'Account verified. Setting up your single sign-on access.', 80);
             $username = $this->directory->provision($identity, $password);
             Log::notice('portal.migration', ['source' => $identity['source'], 'identity_hash' => hash('sha256', $identity['source'].':'.$identity['id']), 'outcome' => 'succeeded']);
 
@@ -105,20 +120,31 @@ class LegacyMigrationService
         if (parse_url($endpoint, PHP_URL_SCHEME) !== 'https' || ! parse_url($endpoint, PHP_URL_HOST) || parse_url($endpoint, PHP_URL_USER) || parse_url($endpoint, PHP_URL_FRAGMENT)) {
             throw new RuntimeException('Legacy account verification is not configured. Please contact support.');
         }
-        $response = match ($provider['driver'] ?? '') {
-            'wordpress_hmac' => $this->verifyWordPress($provider, $endpoint, $identifier, $password),
-            'json_bearer' => $this->verifyJsonBearer($provider, $endpoint, $identifier, $password),
-            default => throw new RuntimeException('Legacy account verification is not configured. Please contact support.'),
-        };
+        try {
+            $response = match ($provider['driver'] ?? '') {
+                'wordpress_hmac' => $this->verifyWordPress($provider, $endpoint, $identifier, $password),
+                'json_bearer' => $this->verifyJsonBearer($provider, $endpoint, $identifier, $password),
+                default => throw new RuntimeException('Legacy account verification is not configured. Please contact support.'),
+            };
+        } catch (ConnectionException) {
+            Log::warning('portal.legacy.verification.failed', ['source' => 'wordpress', 'reason' => 'connection', 'http_status' => null]);
+            throw new RuntimeException('Legacy account verification is unavailable. Please try again later.');
+        }
         if (in_array($response->status(), [401, 404], true)) {
             return null;
         }
         if (! $response->ok()) {
+            Log::warning('portal.legacy.verification.failed', ['source' => 'wordpress', 'reason' => 'http_error', 'http_status' => $response->status()]);
             throw new RuntimeException('Legacy account verification is unavailable. Please try again later.');
         }
         $data = $response->json();
         if (! is_array($data)) {
+            Log::warning('portal.legacy.verification.failed', ['source' => 'wordpress', 'reason' => 'invalid_response', 'http_status' => $response->status()]);
             throw new RuntimeException('Legacy account verification returned an invalid response.');
+        }
+        // Some WordPress installations return an explicit no-match with HTTP 200.
+        if (($provider['driver'] ?? '') === 'wordpress_hmac' && ($data['ok'] ?? null) === false && ($data['user'] ?? null) === null) {
+            return null;
         }
 
         return $data;

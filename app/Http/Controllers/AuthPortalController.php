@@ -4,10 +4,13 @@ namespace App\Http\Controllers;
 
 use App\Services\AuthorizationBroker;
 use App\Services\CognitoIdentityService;
+use App\Services\LoginProgress;
 use Illuminate\Contracts\View\View;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\ValidationException;
 use RuntimeException;
 
@@ -95,23 +98,45 @@ class AuthPortalController extends Controller
         return $this->renderPage($request, 'reset-password');
     }
 
-    public function storeLogin(Request $request): RedirectResponse
+    public function loginProgress(string $attempt): JsonResponse
+    {
+        return response()->json(app(LoginProgress::class)->read($attempt))
+            ->header('Cache-Control', 'no-store, private')
+            ->header('Referrer-Policy', 'no-referrer');
+    }
+
+    public function storeLogin(Request $request): RedirectResponse|JsonResponse
     {
         $context = $this->capturePortalContext($request);
         $validated = $request->validate([
             'email' => ['required', 'string', 'max:128'],
             'password' => ['required', 'string', 'max:256'],
+            'login_progress' => ['nullable', 'uuid'],
         ]);
 
-        try {
-            $result = $this->identity->login($validated['email'], $validated['password'], $context);
-        } catch (RuntimeException $exception) {
-            throw ValidationException::withMessages([
-                'email' => [$exception->getMessage()],
-            ]);
+        $lock = Cache::lock('portal.login.active.'.hash('sha256', $request->session()->getId()), 180);
+        if (! $lock->get()) {
+            throw ValidationException::withMessages(['email' => 'A sign-in is already in progress. Please wait for it to finish.']);
         }
+        try {
+            if (! empty($validated['login_progress'])) {
+                app(LoginProgress::class)->begin($validated['login_progress']);
+            }
+            try {
+                $result = $this->identity->login($validated['email'], $validated['password'], $context);
+            } catch (RuntimeException $exception) {
+                throw ValidationException::withMessages([
+                    'email' => [$exception->getMessage()],
+                ]);
+            }
+            $response = $this->acceptAuthentication($request, $result);
 
-        return $this->acceptAuthentication($request, $result);
+            return $request->expectsJson()
+                ? response()->json(['redirect' => $response->getTargetUrl()])
+                : $response;
+        } finally {
+            $lock->release();
+        }
     }
 
     private function acceptAuthentication(Request $request, array $result): RedirectResponse

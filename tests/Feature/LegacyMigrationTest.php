@@ -4,8 +4,11 @@ namespace Tests\Feature;
 
 use App\Services\CognitoDirectory;
 use App\Services\LegacyMigrationService;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Mockery;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 class LegacyMigrationTest extends TestCase
@@ -64,12 +67,13 @@ class LegacyMigrationTest extends TestCase
         });
     }
 
-    public function test_providers_are_checked_in_order_and_stop_after_the_first_match(): void
+    #[DataProvider('wordpressNoMatchResponses')]
+    public function test_providers_are_checked_in_order_and_stop_after_the_first_match(int $status, array $body): void
     {
         $this->enable();
         config(['migration.providers.cloud' => ['enabled' => true, 'base_url' => 'https://cloud.example.com', 'username' => 'service-user', 'password' => 'service-password']]);
         Http::fake([
-            'https://legacy.example.com/verify' => Http::response(['ok' => false], 401),
+            'https://legacy.example.com/verify' => Http::response($body, $status),
             'https://cloud.example.com/Account/generate-token*' => Http::response(['Token' => 'cloud-token', 'ExpireTime' => now()->addHour()->toIso8601String()]),
             'https://cloud.example.com/backstage/ssoauthenticate' => Http::response($this->identity()),
         ]);
@@ -80,6 +84,16 @@ class LegacyMigrationTest extends TestCase
         Http::assertSentCount(3);
         Http::assertSent(fn ($request) => $request->url() === 'https://cloud.example.com/backstage/ssoauthenticate'
             && $request['identifier'] === 'person@example.com' && $request->hasHeader('Authorization', 'Bearer cloud-token'));
+    }
+
+    public static function wordpressNoMatchResponses(): array
+    {
+        return [
+            'unauthorized no match' => [401, ['ok' => false]],
+            'not found' => [404, ['ok' => false]],
+            'explicit no match' => [200, ['ok' => false]],
+            'explicit no match with null user' => [200, ['ok' => false, 'user' => null]],
+        ];
     }
 
     public function test_wordpress_success_is_verified_once_and_skips_cloud(): void
@@ -127,14 +141,39 @@ class LegacyMigrationTest extends TestCase
 
     public function test_provider_outage_is_not_treated_as_absent_user(): void
     {
+        Log::spy();
         $this->enable();
         config(['migration.providers.cloud' => ['enabled' => true]]);
         Http::fake(['*' => Http::response([], 503)]);
         $directory = $this->mock(CognitoDirectory::class);
         $directory->shouldReceive('resolveUsername')->andReturn(null);
         $directory->shouldNotReceive('provision');
-        $this->expectExceptionMessage('Legacy account verification is unavailable');
-        (new LegacyMigrationService($directory))->resolve('person@example.com', 'password');
+        try {
+            (new LegacyMigrationService($directory))->resolve('person@example.com', 'password');
+            $this->fail('A provider outage must stop migration.');
+        } catch (\RuntimeException $exception) {
+            $this->assertStringContainsString('Legacy account verification is unavailable', $exception->getMessage());
+        }
+        Log::shouldHaveReceived('warning')->once()->with('portal.legacy.verification.failed', ['source' => 'wordpress', 'reason' => 'http_error', 'http_status' => 503]);
+        Http::assertSentCount(1);
+    }
+
+    public function test_provider_connection_failure_is_reported_without_logging_login_details(): void
+    {
+        $this->enable();
+        Log::spy();
+        Http::fake(fn () => throw new ConnectionException('Sensitive request: person@example.com private-password private-signature'));
+        $directory = $this->mock(CognitoDirectory::class);
+        $directory->shouldReceive('resolveUsername')->once()->andReturn(null);
+        $directory->shouldNotReceive('provision');
+        try {
+            (new LegacyMigrationService($directory))->resolve('person@example.com', 'private-password');
+            $this->fail('A connection failure must stop migration.');
+        } catch (\RuntimeException $exception) {
+            $this->assertStringContainsString('Legacy account verification is unavailable', $exception->getMessage());
+            $this->assertNull($exception->getPrevious());
+        }
+        Log::shouldHaveReceived('warning')->once()->with('portal.legacy.verification.failed', ['source' => 'wordpress', 'reason' => 'connection', 'http_status' => null]);
     }
 
     public function test_unverified_legacy_email_cannot_create_verified_cognito_account(): void

@@ -1,10 +1,16 @@
 x-app: &app
-  build: .
+  build:
+    context: .
+    target: development
   image: cognito-self-hosted-ui:local
   env_file:
     - .env
   volumes:
+    - .:/var/www/html
     - app-storage:/var/www/html/storage
+    - dev-vendor:/var/www/html/vendor
+    - dev-bootstrap-cache:/var/www/html/bootstrap/cache
+    - ./docker/php-development.ini:/usr/local/etc/php/conf.d/zz-development.ini:ro
   restart: unless-stopped
 
 services:
@@ -39,7 +45,7 @@ services:
 
   queue:
     <<: *app
-    command: ["php", "artisan", "queue:work", "--sleep=3", "--tries=3", "--timeout=60"]
+    command: ["php", "artisan", "queue:listen", "--sleep=3", "--tries=3", "--timeout=60"]
     stop_grace_period: 70s
     depends_on:
       app:
@@ -55,3 +61,5 @@ services:
 volumes:
   app-storage:
   mysql-data:
+  dev-vendor:
+  dev-bootstrap-cache:

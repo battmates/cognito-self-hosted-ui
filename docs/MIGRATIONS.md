@@ -4,7 +4,7 @@
 
 ## Cloud login fallback and token cache
 
-Login checks Cognito first. For a missing Cognito account, enabled WordPress verification runs first; Cloud runs only when WordPress returns no match (401/404), or WordPress is disabled. A WordPress match stops the search. Provider outages and malformed responses stop migration rather than triggering fallback.
+Login checks Cognito first. For a missing Cognito account, enabled WordPress verification runs first; Cloud runs when WordPress returns no match (401/404, or HTTP 200 with `ok: false` and no user), or WordPress is disabled. A WordPress match stops the search. Provider outages and malformed responses stop migration rather than triggering fallback.
 
 Configure Cloud service credentials in the server environment, never in frontend code or committed files:
 

@@ -447,3 +447,43 @@ h3 {
 :root[data-theme='dark'] .portal-row-menu-item--danger {
     color: #ffbbc4;
 }
+.login-progress-dialog {
+    width: min(520px, calc(100% - 2rem));
+    margin: auto;
+    padding: 0;
+    border-radius: 24px;
+    box-shadow: var(--portal-shadow);
+    max-height: calc(100dvh - 2rem);
+}
+.login-progress-dialog::backdrop { background: rgb(12 18 25 / 62%); backdrop-filter: blur(5px); }
+.login-progress-panel { padding: 36px; text-align: center; }
+.login-progress-icon {
+    display: grid; place-items: center; width: 76px; height: 76px; margin: 0 auto 24px;
+    border-radius: 24px; color: #3da7c7; background: rgb(61 167 199 / 10%);
+}
+.login-progress-spinner { width: 48px; height: 48px; animation: login-spin 1.2s linear infinite; }
+.login-progress-result { font-size: 32px; font-weight: 600; }
+.login-progress-dialog[data-state] .login-progress-spinner { display: none; }
+.login-progress-dialog[data-state='error'] .login-progress-icon { color: #b56f2f; background: rgb(181 111 47 / 12%); }
+.login-progress-eyebrow { color: var(--portal-muted); font-size: 10px; font-weight: 600; letter-spacing: .13em; }
+.login-progress-title { font-size: 28px; line-height: 1.2; margin: 12px 0; }
+.login-progress-title:focus { outline: none; }
+.login-progress-message { font-size: 16px; line-height: 1.6; min-height: 52px; }
+.login-progress-track { height: 7px; border-radius: 20px; background: var(--portal-divider); overflow: hidden; margin: 24px 0; }
+.login-progress-fill { height: 100%; border-radius: inherit; background: #3da7c7; transition: width 450ms ease; }
+.login-progress-dialog[data-state='error'] .login-progress-fill { background: #b56f2f; }
+.login-progress-steps { list-style: none; padding: 0; text-align: left; display: grid; gap: 12px; margin: 0; }
+.login-progress-steps li { display: flex; gap: 12px; align-items: start; font-size: 13px; line-height: 1.5; color: var(--portal-muted); }
+.login-progress-steps li.is-current { color: var(--portal-heading); font-weight: 600; }
+.login-progress-step-marker { display: grid; place-items: center; flex: 0 0 22px; height: 22px; border-radius: 50%; background: rgb(61 167 199 / 12%); color: #3da7c7; }
+.login-progress-reassurance { margin: 24px 0 0; font-size: 12px; line-height: 1.7; }
+.login-progress-dismiss { margin-top: 24px; padding: 12px 20px; border: 1px solid var(--portal-secondary-border); border-radius: 12px; width: 100%; font-weight: 600; }
+.login-form-error { color: #b56f2f; border-color: rgb(181 111 47 / 25%); background: rgb(181 111 47 / 6%); }
+[data-login-form] button:disabled { cursor: wait; opacity: .65; }
+@keyframes login-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+    .login-progress-spinner { animation: none; }
+    .login-progress-fill { transition: none; }
+    .login-progress-dialog::backdrop { backdrop-filter: none; }
+}
+@media (max-width: 480px) { .login-progress-panel { padding: 28px 22px; } }

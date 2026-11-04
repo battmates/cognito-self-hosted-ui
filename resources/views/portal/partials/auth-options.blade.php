@@ -2,6 +2,8 @@
     $activeAuthPanel = old('auth_panel', $page === 'register' ? 'register' : 'login');
     $loginUrl = route('portal.login', array_filter($portalContext));
     $registerUrl = route('portal.register', array_filter($portalContext));
+    $loginAttempt = (string) \Illuminate\Support\Str::uuid();
+    $progressUrl = \Illuminate\Support\Facades\URL::temporarySignedRoute('portal.login.progress', now()->addMinutes(30), ['attempt' => $loginAttempt]);
 @endphp
 
 <section
@@ -44,10 +46,12 @@
             aria-labelledby="login-tab"
             data-auth-panel="login"
         >
-            <form class="space-y-4" method="POST" action="{{ route('portal.login.store') }}">
+            <form class="space-y-4" method="POST" action="{{ route('portal.login.store') }}" data-login-form data-progress-url="{{ $progressUrl }}">
                 @csrf
                 @include('portal.partials.context-fields', ['portalContext' => $portalContext])
                 <input type="hidden" name="auth_panel" value="login">
+                <input type="hidden" name="login_progress" value="{{ $loginAttempt }}">
+                <p class="login-form-error hidden rounded-xl border p-4 text-sm" role="alert" data-login-error></p>
 
                 <div class="space-y-1">
                     <h2 class="portal-heading text-2xl">Sign In</h2>
@@ -56,7 +60,7 @@
 
                 <div>
                     <label class="portal-label mb-2 block text-sm font-semibold uppercase tracking-[0.14em]" for="login-email">Email or username</label>
-                    <input class="portal-input w-full rounded-xl border px-4 py-3 text-base outline-none focus:border-[#3da7c7]" id="login-email" type="text" name="email" value="{{ $defaultEmail }}" autocomplete="username">
+                    <input class="portal-input w-full rounded-xl border px-4 py-3 text-base outline-none focus:border-[#3da7c7]" id="login-email" type="text" name="email" required maxlength="128" value="{{ $defaultEmail }}" autocomplete="username">
                     @if ($activeAuthPanel === 'login')
                         @error('email')<p class="mt-2 text-sm text-[#b56f2f]">{{ $message }}</p>@enderror
                     @endif
@@ -64,7 +68,7 @@
 
                 <div>
                     <label class="portal-label mb-2 block text-sm font-semibold uppercase tracking-[0.14em]" for="login-password">Password</label>
-                    <input class="portal-input w-full rounded-xl border px-4 py-3 text-base outline-none focus:border-[#3da7c7]" id="login-password" type="password" name="password" autocomplete="current-password">
+                    <input class="portal-input w-full rounded-xl border px-4 py-3 text-base outline-none focus:border-[#3da7c7]" id="login-password" type="password" name="password" required maxlength="256" autocomplete="current-password">
                     @if ($activeAuthPanel === 'login')
                         @error('password')<p class="mt-2 text-sm text-[#b56f2f]">{{ $message }}</p>@enderror
                     @endif
@@ -210,4 +214,6 @@
             </div>
         </div>
     </dialog>
+    @include('portal.partials.login-progress')
 </section>
+@vite('resources/js/app.js')

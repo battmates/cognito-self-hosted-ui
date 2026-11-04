@@ -114,7 +114,7 @@ class LoginProgressTest extends TestCase
     }
 
     #[DataProvider('providerOrders')]
-    public function test_real_provider_fallback_reports_only_the_checks_that_run(array $context, array $expected, int $cloudStatus = 200): void
+    public function test_real_provider_fallback_reports_only_the_checks_that_run(array $context, array $expected, int $cloudStatus = 200, ?string $cloudChallenge = null): void
     {
         config(['migration.enabled' => true, 'sso.management_writes_enabled' => true,
             'migration.providers.wordpress' => ['enabled' => true, 'driver' => 'json_bearer', 'endpoint' => 'https://wordpress.example.test/verify', 'token' => 'private-service-token'],
@@ -124,7 +124,7 @@ class LoginProgressTest extends TestCase
         Http::fake([
             'https://wordpress.example.test/verify' => Http::response([], 404),
             'https://cloud.example.test/Account/generate-token*' => Http::response(['Token' => 'private-token', 'ExpireTime' => now()->addHour()->toIso8601String()]),
-            'https://cloud.example.test/backstage/ssoauthenticate' => Http::response($cloudStatus === 401 ? ['message' => 'Invalid credentials.'] : ['authenticated' => false, 'user' => null], $cloudStatus),
+            'https://cloud.example.test/backstage/ssoauthenticate' => Http::response($cloudStatus === 401 && $cloudChallenge === null ? ['message' => 'Invalid credentials.'] : ['authenticated' => false, 'user' => null], $cloudStatus, $cloudChallenge === null ? [] : ['WWW-Authenticate' => $cloudChallenge]),
         ]);
         $attempt = (string) Str::uuid();
         app(LoginProgress::class)->begin($attempt);
@@ -147,6 +147,7 @@ class LoginProgressTest extends TestCase
         return [
             'direct login' => [[], ['cognito', 'cloud', 'cloud-no-match', 'wordpress', 'wordpress-no-match']],
             'nonexistent user with Cloud 401' => [[], ['cognito', 'cloud', 'cloud-no-match', 'wordpress', 'wordpress-no-match'], 401],
+            'actual Cloud 401 with negative account result and Bearer header' => [[], ['cognito', 'cloud', 'cloud-no-match', 'wordpress', 'wordpress-no-match'], 401, 'Bearer'],
             'MusicTeacher login' => [['consumer' => 'musicteacher'], ['cognito', 'wordpress', 'wordpress-no-match', 'cloud', 'cloud-no-match']],
         ];
     }

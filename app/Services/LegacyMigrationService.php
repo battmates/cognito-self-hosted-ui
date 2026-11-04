@@ -133,6 +133,12 @@ class LegacyMigrationService
             return null;
         }
         if (! $response->ok()) {
+            $body = strtolower($response->body());
+            if (in_array($response->status(), [403, 429, 503], true)
+                && str_contains($body, 'wordfence') && str_contains($body, 'temporarily locked out')) {
+                Log::error('portal.legacy.verification.failed', ['source' => 'wordpress', 'reason' => 'security_lockout', 'http_status' => $response->status()]);
+                throw new RuntimeException('MusicTeacher has temporarily blocked sign-in attempts. Please wait before trying again, or contact support.');
+            }
             Log::error('portal.legacy.verification.failed', ['source' => 'wordpress', 'reason' => 'http_error', 'http_status' => $response->status()]);
             throw new RuntimeException('Legacy account verification is unavailable. Please try again later.');
         }

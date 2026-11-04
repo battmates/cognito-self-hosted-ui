@@ -206,6 +206,24 @@ class LegacyMigrationTest extends TestCase
         Log::shouldHaveReceived('error')->once()->with('portal.legacy.verification.failed', ['source' => 'wordpress', 'reason' => 'connection', 'http_status' => null]);
     }
 
+    public function test_wordfence_lockout_is_explained_and_is_not_treated_as_no_match(): void
+    {
+        $this->enable();
+        Log::spy();
+        Http::fake(['*' => Http::response(['message' => 'Wordfence: You are temporarily locked out. Sensitive request data must not be logged.'], 503)]);
+        $directory = $this->mock(CognitoDirectory::class);
+        $directory->shouldReceive('resolveUsername')->once()->andReturn(null);
+        $directory->shouldNotReceive('provision');
+        try {
+            (new LegacyMigrationService($directory))->resolve('missing@example.com', 'private-password');
+            $this->fail('The security lockout must not be treated as an absent user.');
+        } catch (\RuntimeException $exception) {
+            $this->assertSame('MusicTeacher has temporarily blocked sign-in attempts. Please wait before trying again, or contact support.', $exception->getMessage());
+        }
+        Log::shouldHaveReceived('error')->once()->with('portal.legacy.verification.failed', ['source' => 'wordpress', 'reason' => 'security_lockout', 'http_status' => 503]);
+        Http::assertSentCount(1);
+    }
+
     public function test_unverified_legacy_email_cannot_create_verified_cognito_account(): void
     {
         $this->enable();

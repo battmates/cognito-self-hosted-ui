@@ -73,9 +73,21 @@ jobs:
           DEPLOY_USER: ${{ secrets.CLOUDWAYS_USER_LIVE }}
           DEPLOY_KEY: ${{ secrets.CLOUDWAYS_KEY_LIVE }}
         run: |
-          if [[ ! "$APP_ROOT" =~ ^/([a-zA-Z0-9_-]+/)+public_html$ ]] ||
-             [[ -z "$DEPLOY_HOST" || -z "$DEPLOY_USER" || -z "$DEPLOY_KEY" ]]; then
-            echo "Set the live SSH secrets and an absolute application path ending in /public_html (no trailing slash)."
+          missing=false
+          for entry in APP_ROOT:CLOUDWAYS_APP_PATH_LIVE DEPLOY_HOST:CLOUDWAYS_HOST_LIVE DEPLOY_USER:CLOUDWAYS_USER_LIVE DEPLOY_KEY:CLOUDWAYS_KEY_LIVE; do
+            variable="${entry%%:*}"
+            secret_name="${entry#*:}"
+            if [[ -z "${!variable}" ]]; then
+              echo "::error::Missing $secret_name. Add it under Settings > Environments > live > Environment secrets."
+              missing=true
+            fi
+          done
+          if [[ "$missing" == true ]]; then
+            exit 1
+          fi
+          if [[ ! "$APP_ROOT" =~ ^/([a-zA-Z0-9_.-]+/)+public_html$ ]] ||
+             [[ "$APP_ROOT" == */../* || "$APP_ROOT" == */./* ]]; then
+            echo "::error::CLOUDWAYS_APP_PATH_LIVE must be the absolute path to public_html, without quotes, surrounding whitespace or a trailing slash. Copy the output of pwd from that directory."
             exit 1
           fi
 

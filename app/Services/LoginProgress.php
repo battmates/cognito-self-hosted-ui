@@ -14,7 +14,7 @@ class LoginProgress
     {
         $this->attempt = $attempt;
         $this->steps = [];
-        $this->report('cognito', 'Checking your RSL single sign-on account.', 12);
+        $this->report('cognito', 'Checking your single sign-on account.', 12);
     }
 
     public function report(string $stage, string $message, int $percent, string $state = 'checking'): void

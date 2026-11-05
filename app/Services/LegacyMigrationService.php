@@ -31,7 +31,7 @@ class LegacyMigrationService
         $unavailable = [];
         foreach ($providers as $position => $name) {
             $provider = config('migration.providers.'.$name, []);
-            $label = $name === 'wordpress' ? 'MusicTeacher' : 'RSL Cloud';
+            $label = $name === 'wordpress' ? 'MusicTeacher' : 'Cloud';
             app(LoginProgress::class)->report(
                 $name,
                 ($position === 0 ? 'No matching single sign-on account. ' : '').'Checking '.$label.' for a matching sign-in.',
@@ -66,7 +66,7 @@ class LegacyMigrationService
             if (! $identity) {
                 app(LoginProgress::class)->report(
                     $name.'-no-match',
-                    $name === 'wordpress' ? 'No matching MusicTeacher sign-in found.' : 'No matching RSL Cloud sign-in found.',
+                    $name === 'wordpress' ? 'No matching MusicTeacher sign-in found.' : 'No matching Cloud sign-in found.',
                     $position === 0 ? 45 : 70,
                 );
 

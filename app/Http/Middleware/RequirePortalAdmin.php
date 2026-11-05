@@ -29,6 +29,9 @@ class RequirePortalAdmin
         }
         abort_unless($allowed, 403);
 
+        // Keep authorization tied to this request's directory lookup, not old token claims.
+        $request->attributes->set('portal.actor', $user);
+
         return $next($request);
     }
 }

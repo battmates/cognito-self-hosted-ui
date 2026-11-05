@@ -100,7 +100,7 @@ class MigrationPasswordChallenge
     private function presentation(string $id, array $pending): array
     {
         return ['password_required' => true, 'challenge_id' => $id, 'requirements' => $pending['requirements'],
-            'provider_name' => $pending['identity']['source'] === 'cloud' ? 'RSL Cloud' : 'MusicTeacher', 'expires_at' => $pending['expires_at']];
+            'provider_name' => $pending['identity']['source'] === 'cloud' ? 'Cloud' : 'MusicTeacher', 'expires_at' => $pending['expires_at']];
     }
 
     private function key(string $sessionId, string $id): string

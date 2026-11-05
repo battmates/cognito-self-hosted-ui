@@ -235,7 +235,7 @@ class LegacyMigrationTest extends TestCase
         $directory = $this->mock(CognitoDirectory::class);
         $directory->shouldReceive('resolveUsername')->andReturn(null);
         $directory->shouldNotReceive('provision');
-        $this->expectExceptionMessage('RSL Cloud is temporarily unavailable');
+        $this->expectExceptionMessage('Cloud is temporarily unavailable');
         (new LegacyMigrationService($directory))->resolve('person@example.com', 'password');
     }
 

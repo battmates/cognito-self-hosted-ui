@@ -103,7 +103,7 @@ class AdminUsersController extends Controller
             'role' => ['nullable', 'string', 'max:128'], 'new_role' => ['nullable', 'string', 'max:128'], 'password' => ['required', 'string', 'confirmed', 'max:256'], 'temporary' => ['nullable', 'boolean']]);
         $input['role'] = $this->selectedRole($input);
         try {
-            $directory->createUser($input, (string) $request->session()->get('auth.status.user.user_role'));
+            $directory->createUser($input, $this->actorRole($request, $directory));
         } catch (RuntimeException $e) {
             throw ValidationException::withMessages(['create' => $e->getMessage()]);
         }
@@ -117,7 +117,7 @@ class AdminUsersController extends Controller
             'given_name' => ['nullable', 'string', 'max:128'], 'family_name' => ['nullable', 'string', 'max:128'], 'phone_number' => ['nullable', 'string', 'max:32'], 'role' => ['nullable', 'string', 'max:128'], 'new_role' => ['nullable', 'string', 'max:128']]);
         $input['role'] = $this->selectedRole($input);
         try {
-            $directory->updateAttributes($input['username'], ['email' => $input['email'] ?? '', 'given_name' => $input['given_name'] ?? '', 'family_name' => $input['family_name'] ?? '', 'phone_number' => $input['phone_number'] ?? '', 'custom:user_role' => $input['role'] ?? ''], (string) $request->session()->get('auth.status.user.user_role'));
+            $directory->updateAttributes($input['username'], ['email' => $input['email'] ?? '', 'given_name' => $input['given_name'] ?? '', 'family_name' => $input['family_name'] ?? '', 'phone_number' => $input['phone_number'] ?? '', 'custom:user_role' => $input['role'] ?? ''], $this->actorRole($request, $directory));
         } catch (RuntimeException $e) {
             throw ValidationException::withMessages(['attributes' => $e->getMessage()]);
         }
@@ -132,6 +132,13 @@ class AdminUsersController extends Controller
         } catch (RuntimeException) {
             return response()->json(['message' => 'The role list is unavailable. Please try again.'], 503);
         }
+    }
+
+    private function actorRole(Request $request, CognitoDirectory $directory): string
+    {
+        $attributes = $directory->attributes($request->attributes->get('portal.actor', []));
+
+        return (string) ($attributes['custom:user_role'] ?? '');
     }
 
     private function selectedRole(array $input): string

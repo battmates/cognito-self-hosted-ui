@@ -125,7 +125,7 @@ class AuthorizationBrokerTest extends TestCase
         $this->get('/login?'.http_build_query($this->params(['redirect_uri' => 'https://cloud.example.test/callback'])))
             ->assertOk()
             ->assertSee('images/app-logos/rsl-cloud-light.svg')
-            ->assertSee('RSL Cloud logo')
+            ->assertSee('Cloud logo')
             ->assertDontSee('Please login or register to continue');
     }
 

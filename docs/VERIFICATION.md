@@ -25,7 +25,7 @@
 - End-to-end login from the actual staging applications after changing their Cognito domain settings. This needs a server-accessible HTTPS deployment and explicit switch approval; local consumer contract tests are not a live staging cutover.
 - Backstage's database-stored ACF client ID/secret; only its repository contract was available.
 - Live Google federation completion, live registration email/confirmation and recovery email delivery, real MFA challenges, and administrative mutations. These remain staging acceptance tests; their application flows are covered with fakes.
-- WordPress/RSL Cloud migration endpoints, live migrated accounts, collision decisions and partial-provisioning recovery. The adapters are a proposed integration contract and remain disabled.
+- WordPress/Cloud migration endpoints, live migrated accounts, collision decisions and partial-provisioning recovery. The adapters are a proposed integration contract and remain disabled.
 - Cloud, MusicTeacher.com and Spotlight client/callback/token contracts; a different Cognito client requires further work.
 - Final policy content, production IAM review (including who can write admin-role attributes), deployment/session/cache operations, and additional identity providers.
 

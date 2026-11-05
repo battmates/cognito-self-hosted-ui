@@ -84,7 +84,7 @@ if (form && dialog && typeof dialog.showModal === 'function') {
         form.setAttribute('aria-busy', 'true');
         delete dialog.dataset.state;
         title.textContent = creating ? 'Setting up your account' : 'Signing you in';
-        message.textContent = creating ? 'Creating your single sign-on account with your new password.' : 'Connecting securely to RSL single sign-on.';
+        message.textContent = creating ? 'Creating your single sign-on account with your new password.' : 'Connecting securely to single sign-on.';
         reassurance.textContent = 'Please keep this window open. You only need to submit once.';
         dismiss.hidden = true;
         dialog.querySelector('.login-progress-result').hidden = true;

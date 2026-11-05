@@ -42,7 +42,7 @@ class MigrationPasswordChallengeTest extends TestCase
             ->with('person@example.com', 'legacy-password', Mockery::any())
             ->andThrow(new MigrationPasswordRequiredException($this->identity()));
         $response = $this->postJson('/login', ['email' => 'person@example.com', 'password' => 'legacy-password']);
-        $response->assertOk()->assertJsonPath('password_required', true)->assertJsonPath('provider_name', 'RSL Cloud');
+        $response->assertOk()->assertJsonPath('password_required', true)->assertJsonPath('provider_name', 'Cloud');
         foreach ($response->headers->getCookies() as $cookie) {
             if ($cookie->getName() === config('session.cookie')) {
                 $this->withUnencryptedCookie($cookie->getName(), $cookie->getValue());

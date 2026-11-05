@@ -471,7 +471,7 @@ h3 {
 .login-progress-message { font-size: 16px; line-height: 1.6; min-height: 52px; }
 .login-progress-track { height: 7px; border-radius: 20px; background: var(--portal-divider); overflow: hidden; margin: 24px 0; }
 .login-progress-fill { height: 100%; border-radius: inherit; background: #3da7c7; transition: width 450ms ease; }
-.login-progress-dialog[data-state='error'] .login-progress-fill { background: #b56f2f; }
+.login-progress-dialog[data-state='error'] .login-progress-track { display: none; }
 .login-progress-steps { list-style: none; padding: 0; text-align: left; display: grid; gap: 12px; margin: 0; }
 .login-progress-steps li { display: flex; gap: 12px; align-items: start; font-size: 13px; line-height: 1.5; color: var(--portal-muted); }
 .login-progress-steps li.is-current { color: var(--portal-heading); font-weight: 600; }

@@ -68,6 +68,7 @@ class LegacyMigrationService
                     $name.'-no-match',
                     $name === 'wordpress' ? 'No matching MusicTeacher sign-in found.' : 'No matching Cloud sign-in found.',
                     $position === 0 ? 45 : 70,
+                    'no-match',
                 );
 
                 continue;

@@ -79,6 +79,30 @@ class LoginProgressTest extends TestCase
         $this->assertCount(0, $response->headers->getCookies());
     }
 
+    public function test_failed_login_response_includes_the_final_musicteacher_checkpoint(): void
+    {
+        config(['migration.enabled' => true, 'sso.management_writes_enabled' => true,
+            'migration.providers.wordpress' => ['enabled' => true, 'driver' => 'json_bearer', 'endpoint' => 'https://wordpress.example.test/verify', 'token' => 'private-service-token'],
+            'migration.providers.cloud' => ['enabled' => true, 'base_url' => 'https://cloud.example.test', 'username' => 'service-user', 'password' => 'private-service-password'],
+        ]);
+        $this->mock(CognitoDirectory::class)->shouldReceive('resolveUsername')->once()->andReturn(null);
+        Http::fake([
+            'https://cloud.example.test/Account/generate-token*' => Http::response(['Token' => 'private-token', 'ExpireTime' => now()->addHour()->toIso8601String()]),
+            'https://cloud.example.test/backstage/ssoauthenticate' => Http::response(['authenticated' => false, 'user' => null]),
+            'https://wordpress.example.test/verify' => Http::response([], 404),
+        ]);
+
+        $response = $this->postJson('/login', ['email' => 'person@example.com', 'password' => 'private-password', 'login_progress' => (string) Str::uuid()]);
+
+        $response->assertUnprocessable()->assertJsonValidationErrors('email')
+            ->assertJsonCount(5, 'steps')
+            ->assertJsonPath('steps.4.stage', 'wordpress-no-match')
+            ->assertJsonPath('steps.4.message', 'No matching MusicTeacher sign-in found.')
+            ->assertJsonPath('steps.4.state', 'no-match');
+        $this->assertStringNotContainsString('private-', $response->getContent());
+        $this->assertStringNotContainsString('person@example.com', $response->getContent());
+    }
+
     public function test_progress_requires_an_unexpired_signed_url(): void
     {
         $attempt = (string) Str::uuid();

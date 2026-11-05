@@ -287,7 +287,7 @@ class CognitoDirectory
         if ((! $generateUsername && $this->hasIdentity($identity['username'])) || $this->hasIdentity($identity['email'])) {
             throw new RuntimeException('An account already exists. Sign in to it or contact support.');
         }
-        $base = $generateUsername ? $this->nameUsername($identity) : $identity['username'];
+        $base = $this->migrationUsername($identity);
         for ($attempt = 1; $attempt <= 100; $attempt++) {
             $username = $base.($attempt === 1 ? '' : '_'.$attempt);
             if ($generateUsername && $this->hasIdentity($username)) {
@@ -358,8 +358,12 @@ class CognitoDirectory
         });
     }
 
-    private function nameUsername(array $identity): string
+    private function migrationUsername(array $identity): string
     {
+        if (! filter_var($identity['username'], FILTER_VALIDATE_EMAIL)) {
+            return $identity['username'];
+        }
+
         $parts = [];
         foreach (['given_name', 'family_name'] as $attribute) {
             $part = preg_replace('/[^a-z0-9]/', '', strtolower(Str::ascii($identity[$attribute])));

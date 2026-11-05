@@ -54,7 +54,7 @@ class LegacyMigrationTest extends TestCase
         Http::fake(['https://legacy.example.com/verify' => Http::response($this->wordpressIdentity(['role' => 'administrator', 'custom:user_role' => 'admin']))]);
         $directory = $this->mock(CognitoDirectory::class);
         $directory->shouldReceive('resolveUsername')->andReturn(null);
-        $directory->shouldReceive('provision')->twice()->with(Mockery::on(fn ($identity) => $identity['username'] === 'wp_123' && $identity['preferred_username'] === 'legacy-user' && ! isset($identity['role']) && ! isset($identity['custom:user_role'])), 'the-password')->andReturn('wp_123');
+        $directory->shouldReceive('provision')->twice()->with(Mockery::on(fn ($identity) => $identity['username'] === 'legacy-user' && $identity['preferred_username'] === 'legacy-user' && ! isset($identity['role']) && ! isset($identity['custom:user_role'])), 'the-password')->andReturn('wp_123');
         $service = new LegacyMigrationService($directory);
         $this->assertSame('wp_123', $service->resolve('legacy-user', 'the-password'));
         $this->assertSame('wp_123', $service->resolve('person@example.com', 'the-password'));
@@ -290,7 +290,7 @@ class LegacyMigrationTest extends TestCase
             ],
         ]);
         Http::fake(function ($request) {
-            $body = '{"username":"missing@example.com"}';
+            $body = '{"username":"person@example.com"}';
             $this->assertSame($body, $request->body());
             $timestamp = $request->header('X-Cognito-Migrate-Timestamp')[0];
             $this->assertMatchesRegularExpression('/^\d+$/', $timestamp);
@@ -301,13 +301,59 @@ class LegacyMigrationTest extends TestCase
             ]]);
         });
         $directory = $this->mock(CognitoDirectory::class);
-        $directory->shouldReceive('hasIdentity')->with('wordpress-user')->once()->andReturn(false);
-        $directory->shouldReceive('hasIdentity')->with('person@example.com')->once()->andReturn(false);
+        $directory->shouldReceive('resolveUsername')->with('wp_123')->once()->andReturn(null);
+        $directory->shouldReceive('resolveUsername')->with('wordpress-user')->once()->andReturn(null);
+        $directory->shouldReceive('resolveUsername')->with('person@example.com')->once()->andReturn(null);
         $directory->shouldReceive('provisionForPasswordRecovery')->once()->with(Mockery::on(fn ($identity) => $identity === [
-            'source' => 'wordpress', 'id' => '123', 'username' => 'wordpress-user', 'email' => 'person@example.com', 'given_name' => 'Example', 'family_name' => 'User',
+            'source' => 'wordpress', 'id' => '123', 'username' => 'wordpress-user', 'email' => 'person@example.com', 'given_name' => 'Example', 'family_name' => 'User', 'preferred_username' => 'wordpress-user',
         ]))->andReturn('wordpress-user');
 
-        $this->assertSame('wordpress-user', (new LegacyMigrationService($directory))->recoverForPasswordReset('missing@example.com'));
+        $this->assertSame('wordpress-user', (new LegacyMigrationService($directory))->recoverForPasswordReset('person@example.com'));
+    }
+
+    public function test_login_and_recovery_map_wordpress_accounts_with_missing_names_identically(): void
+    {
+        $this->enable();
+        config([
+            'migration.password_recovery_enabled' => true,
+            'migration.providers.wordpress.lookup_endpoint' => 'https://legacy.example.com/lookup',
+        ]);
+        $response = $this->wordpressIdentity();
+        unset($response['user']['first_name'], $response['user']['last_name']);
+        Http::fake(['*' => Http::response($response)]);
+        $directory = $this->mock(CognitoDirectory::class);
+        $directory->shouldReceive('resolveUsername')->andReturn(null);
+        $loginIdentity = null;
+        $directory->shouldReceive('provision')->once()->with(Mockery::on(function ($identity) use (&$loginIdentity) {
+            $loginIdentity = $identity;
+
+            return $identity['username'] === 'legacy-user'
+                && $identity['given_name'] === 'Unknown' && $identity['family_name'] === 'User';
+        }), 'password')->andReturn('legacy-user');
+        $directory->shouldReceive('provisionForPasswordRecovery')->once()->with(Mockery::on(
+            function ($identity) use (&$loginIdentity) {
+                return $identity === $loginIdentity;
+            },
+        ))->andReturn('legacy-user');
+        $service = new LegacyMigrationService($directory);
+
+        $this->assertSame('legacy-user', $service->resolve('person@example.com', 'password'));
+        $this->assertSame('legacy-user', $service->recoverForPasswordReset('person@example.com'));
+    }
+
+    public function test_recovery_reuses_a_previous_wordpress_migration_username(): void
+    {
+        $this->enable();
+        config([
+            'migration.password_recovery_enabled' => true,
+            'migration.providers.wordpress.lookup_endpoint' => 'https://legacy.example.com/lookup',
+        ]);
+        Http::fake(['*' => Http::response($this->wordpressIdentity())]);
+        $directory = $this->mock(CognitoDirectory::class);
+        $directory->shouldReceive('resolveUsername')->with('wp_123')->once()->andReturn('wp_123');
+        $directory->shouldNotReceive('provisionForPasswordRecovery');
+
+        $this->assertSame('wp_123', (new LegacyMigrationService($directory))->recoverForPasswordReset('person@example.com'));
     }
 
     public function test_password_recovery_returns_no_match_for_a_wordpress_lookup_not_found(): void

@@ -8,7 +8,7 @@ See [the implementation plan and outstanding decisions](docs/IMPLEMENTATION_PLAN
 
 ## Local setup
 
-Requires PHP 8.2+, Composer 2, Node 20.19+ and SQLite (or another Laravel database). Composer resolves dependencies against PHP 8.2. The official AWS PHP SDK supplies IAM-signed directory operations.
+Requires PHP 8.2+, Composer 2, Node 22 (22.12.0 or newer) and SQLite (or another Laravel database). Composer resolves dependencies against PHP 8.2. The official AWS PHP SDK supplies IAM-signed directory operations.
 
 ```sh
 composer install

@@ -43,7 +43,7 @@ The private application path is derived from the public path: `<public_html>/../
 ## Deployment behavior
 
 1. Check out `main`; compare Composer files with the push's previous commit. An unavailable previous commit counts as changed dependencies.
-2. Run `npm ci` and `npm run build` using `.nvmrc` (Node 20.19.0). The build is required because `public/build` is ignored by Git.
+2. Run `npm ci` and `npm run build` using `.nvmrc` (the latest available Node 22 release). Local builds require Node 22.12.0 or newer. The build is required because `public/build` is ignored by Git.
 3. Install PHP dependencies on the GitHub runner and run Laravel tests with a test-only key and in-memory SQLite. Failures stop deployment before upload; the test key never replaces the server key.
 4. Validate SSH configuration, existing private/public directories, public entry-point files, private `.env` and required server commands. Create build asset directories in both roots.
 5. Upload hashed frontend assets to **both** `private_html/app/public/build/assets` and `public_html/build/assets` before publishing any new manifest. Existing hashed assets are retained so the old manifest remains usable while uploading.

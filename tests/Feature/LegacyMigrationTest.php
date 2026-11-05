@@ -121,6 +121,7 @@ class LegacyMigrationTest extends TestCase
             'Cloud' => [['consumer' => 'cloud']],
             'Backstage' => [['consumer' => 'backstage']],
             'Guestlist' => [['consumer' => 'guestlist']],
+            'Cloud 401 no match' => [[], 401],
         ];
     }
 

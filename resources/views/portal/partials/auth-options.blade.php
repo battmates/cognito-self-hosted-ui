@@ -68,7 +68,13 @@
 
                 <div>
                     <label class="portal-label mb-2 block text-sm font-semibold uppercase tracking-[0.14em]" for="login-password">Password</label>
-                    <input class="portal-input w-full rounded-xl border px-4 py-3 text-base outline-none focus:border-[#3da7c7]" id="login-password" type="password" name="password" required maxlength="256" autocomplete="current-password">
+                    <div class="password-field">
+                        <input class="portal-input w-full rounded-xl border px-4 py-3 text-base outline-none focus:border-[#3da7c7]" id="login-password" type="password" name="password" required maxlength="256" autocomplete="current-password">
+                        <button class="password-visibility-toggle" type="button" data-password-toggle aria-controls="login-password" aria-label="Show password" aria-pressed="false" title="Show password" hidden>
+                            <svg data-password-show aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>
+                            <svg data-password-hide aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" hidden><path d="m3 3 18 18M10.6 5.1A12 12 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3 3.8M6.2 6.2A19 19 0 0 0 2 12s3.5 7 10 7a12 12 0 0 0 5.8-1.5M10 10a3 3 0 0 0 4 4"/></svg>
+                        </button>
+                    </div>
                     @if ($activeAuthPanel === 'login')
                         @error('password')<p class="mt-2 text-sm text-[#b56f2f]">{{ $message }}</p>@enderror
                     @endif

@@ -34,28 +34,30 @@ class CloudMigrationClient
             throw new RuntimeException('Cloud account verification is unavailable. Please try again later.');
         }
 
-        // An unexpected authorization failure must not generate a new token on
-        // every login attempt. The cached token remains valid until ExpireTime.
-        if ($response->status() === 404 || ($response->status() === 401 && ! $response->header('WWW-Authenticate'))) {
+        $data = $response->json();
+        $challenge = (string) $response->header('WWW-Authenticate');
+        preg_match('/\berror="?(invalid_token|invalid_request|insufficient_scope)\b/', $challenge, $error);
+        $challengeError = $error[1] ?? null;
+        $noMatch = is_array($data) && ($data['authenticated'] ?? null) === false
+            && array_key_exists('user', $data) && $data['user'] === null;
+
+        // Cloud includes a generic authentication challenge on account no-match
+        // responses too. Only an explicit challenge error takes precedence over
+        // the negative account result; never regenerate tokens for bad logins.
+        if ($response->status() === 404
+            || ($response->status() === 401 && $challengeError === null && ($challenge === '' || $noMatch))) {
             return null;
         }
-        $data = $response->json();
-        // Cloud uses 401 for unmatched login details; a WWW-Authenticate
-        // challenge identifies a service authorization failure instead.
-        if ($response->status() === 200
-            && is_array($data) && ($data['authenticated'] ?? null) === false
-            && array_key_exists('user', $data) && $data['user'] === null) {
+        if ($response->status() === 200 && $noMatch) {
             return null;
         }
         if (! $response->ok()) {
             if ($response->status() === 401) {
-                $challenge = (string) $response->header('WWW-Authenticate');
-                preg_match('/\berror="?(invalid_token|invalid_request|insufficient_scope)\b/', $challenge, $error);
                 Log::error('portal.cloud.authorization.rejected', [
                     'authenticated_false' => is_array($data) && ($data['authenticated'] ?? null) === false,
                     'user_is_null' => is_array($data) && array_key_exists('user', $data) && $data['user'] === null,
                     'bearer_challenge' => $challenge !== '',
-                    'challenge_error' => $error[1] ?? null,
+                    'challenge_error' => $challengeError,
                 ]);
             }
             // Never log the response body, request or exception: they may contain credentials.

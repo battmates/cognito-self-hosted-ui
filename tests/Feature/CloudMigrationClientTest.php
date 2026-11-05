@@ -134,6 +134,17 @@ class CloudMigrationClientTest extends TestCase
         Http::assertSentCount(2);
     }
 
+    public function test_negative_account_result_with_a_generic_bearer_header_allows_fallback(): void
+    {
+        Http::fake([
+            'https://cloud.example.test/Account/generate-token*' => Http::response(['Token' => 'cached-bearer', 'ExpireTime' => now()->addHour()->toIso8601String()]),
+            'https://cloud.example.test/backstage/ssoauthenticate' => Http::response(['authenticated' => false, 'user' => null], 401, ['WWW-Authenticate' => 'Bearer']),
+        ]);
+
+        $this->assertNull((new CloudMigrationClient)->authenticate($this->provider(), 'missing@example.com', 'password'));
+        Http::assertSentCount(2);
+    }
+
     public function test_bearer_challenge_is_not_treated_as_an_account_no_match(): void
     {
         Log::spy();

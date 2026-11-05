@@ -10,6 +10,7 @@ use Aws\Exception\AwsException;
 use Aws\Result;
 use Illuminate\Support\Facades\Log;
 use Mockery;
+use PHPUnit\Framework\Attributes\DataProvider;
 use RuntimeException;
 use Tests\TestCase;
 
@@ -52,7 +53,18 @@ class CognitoMigrationUsernameTest extends TestCase
         $client->shouldReceive('adminSetUserPassword')->once()->with(Mockery::on(fn ($input) => $input['Username'] === $username && $input['Permanent'] === true))->andReturn(new Result);
     }
 
-    public function test_email_username_uses_given_and_family_names(): void
+    public static function migrationPaths(): array
+    {
+        return [
+            'cloud login' => ['cloud', false],
+            'wordpress login' => ['wordpress', false],
+            'cloud recovery' => ['cloud', true],
+            'wordpress recovery' => ['wordpress', true],
+        ];
+    }
+
+    #[DataProvider('migrationPaths')]
+    public function test_email_username_uses_given_and_family_names(string $source, bool $recovery): void
     {
         $client = $this->mock(CognitoIdentityProviderClient::class);
         $directory = $this->directory($client);
@@ -60,7 +72,10 @@ class CognitoMigrationUsernameTest extends TestCase
         $directory->shouldReceive('hasIdentity')->once()->with('aaron.osullivan')->andReturn(false);
         $this->expectCreated($client, 'aaron.osullivan');
 
-        $this->assertSame('aaron.osullivan', $directory->provision($this->identity(), 'Password123!'));
+        $identity = $this->identity(['source' => $source]);
+        $this->assertSame('aaron.osullivan', $recovery
+            ? $directory->provisionForPasswordRecovery($identity)
+            : $directory->provision($identity, 'Password123!'));
     }
 
     public function test_wordpress_preferred_username_is_saved_with_the_canonical_username(): void

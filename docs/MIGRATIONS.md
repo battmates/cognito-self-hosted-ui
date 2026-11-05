@@ -57,7 +57,7 @@ The endpoint verifies the actual WordPress password and supports either login na
 
 MusicTeacher's existing Lambda and WordPress-to-Cognito sync both treat the email on a password-verified WordPress account as authoritative, so the Laravel migration preserves that behavior and creates it as `email_verified=true`.
 
-## RSL Cloud adapter contract
+## Cloud adapter contract
 
 Cloud uses the token acquisition and caching flow above. Its authentication endpoint expects the following successful response:
 

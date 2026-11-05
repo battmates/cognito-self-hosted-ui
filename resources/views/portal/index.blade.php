@@ -11,7 +11,7 @@
     ];
 
     $descriptions = [
-        'status' => 'One account for your RSL applications. Choose where to go next.',
+        'status' => 'One account for your applications. Choose where to go next.',
         'login' => 'Use your Cognito-backed account to sign in.',
         'register' => 'Create a new account on the central sign-in portal.',
         'confirm-registration' => 'Enter the confirmation code we sent to your email.',
@@ -83,7 +83,7 @@
                     @foreach ($applications as $application)
                         <a class="portal-card rounded-xl border p-6 transition hover:border-[#3da7c7] {{ empty($application['base_url']) ? 'pointer-events-none opacity-70' : '' }}" @if(!empty($application['base_url'])) href="{{ $application['base_url'] }}" target="_blank" rel="noopener noreferrer" @endif>
                             @php($logoKey = strtolower(str_replace([' ', '.'], ['', ''], $application['label'])))
-                            <div class="application-logo application-logo--{{ $logoKey }}"><img src="{{ asset('images/app-logos/'.match($logoKey) { 'rslcloud' => 'rsl-cloud-light.svg', 'backstage' => 'backstage-light.svg', 'guestlist' => 'guestlist.svg', default => 'musicteacher.svg' }) }}" alt="{{ $application['label'] }} logo"></div>
+                            <div class="application-logo application-logo--{{ $logoKey }}"><img src="{{ asset('images/app-logos/'.match($logoKey) { 'cloud' => 'rsl-cloud-light.svg', 'backstage' => 'backstage-light.svg', 'guestlist' => 'guestlist.svg', default => 'musicteacher.svg' }) }}" alt="{{ $application['label'] }} logo"></div>
                             <h3 class="portal-heading mt-5 text-2xl">{{ $application['label'] }}</h3>
                             <p class="portal-copy mt-5">{{ $application['description'] }}</p>
                             <span class="mt-6 inline-flex font-semibold text-[#3da7c7]">{{ empty($application['base_url']) ? 'Coming soon' : 'Open application →' }}</span>

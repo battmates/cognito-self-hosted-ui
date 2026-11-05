@@ -19,7 +19,7 @@ class CognitoIdentityService
 
     public function login(string $username, string $password, array $context = []): array
     {
-        app(LoginProgress::class)->report('cognito', 'Checking your RSL single sign-on account.', 12);
+        app(LoginProgress::class)->report('cognito', 'Checking your single sign-on account.', 12);
         if (config('migration.enabled')) {
             $username = app(LegacyMigrationService::class)->resolve($username, $password, $context);
         }
@@ -91,12 +91,11 @@ class CognitoIdentityService
             'id_token' => $result['IdToken'] ?? '', 'access_token' => $result['AccessToken'] ?? '',
             'refresh_token' => $result['RefreshToken'] ?? null, 'expires_in' => $result['ExpiresIn'] ?? 0,
             'token_type' => $result['TokenType'] ?? 'Bearer',
-        ], $context);
+        ], $context, $this->validateIdToken($result['IdToken'] ?? ''));
     }
 
-    private function sessionResult(array $tokens, array $context): array
+    private function sessionResult(array $tokens, array $context, array $claims): array
     {
-        $claims = $this->validateIdToken($tokens['id_token']);
         if (empty($tokens['access_token']) || empty($claims['exp']) || empty($claims['sub'])) {
             throw new RuntimeException('Cognito did not return a usable sign-in response.');
         }
@@ -235,7 +234,7 @@ class CognitoIdentityService
             throw new RuntimeException('The social sign-in response could not be verified.');
         }
 
-        return $this->sessionResult($tokens, $context);
+        return $this->sessionResult($tokens, $context, $claims);
     }
 
     public function register(array $input): array

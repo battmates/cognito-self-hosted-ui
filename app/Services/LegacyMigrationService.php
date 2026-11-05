@@ -31,7 +31,7 @@ class LegacyMigrationService
         $unavailable = [];
         foreach ($providers as $position => $name) {
             $provider = config('migration.providers.'.$name, []);
-            $label = $name === 'wordpress' ? 'MusicTeacher' : 'RSL Cloud';
+            $label = $name === 'wordpress' ? 'MusicTeacher' : 'Cloud';
             app(LoginProgress::class)->report(
                 $name,
                 ($position === 0 ? 'No matching single sign-on account. ' : '').'Checking '.$label.' for a matching sign-in.',
@@ -66,13 +66,14 @@ class LegacyMigrationService
             if (! $identity) {
                 app(LoginProgress::class)->report(
                     $name.'-no-match',
-                    $name === 'wordpress' ? 'No matching MusicTeacher sign-in found.' : 'No matching RSL Cloud sign-in found.',
+                    $name === 'wordpress' ? 'No matching MusicTeacher sign-in found.' : 'No matching Cloud sign-in found.',
                     $position === 0 ? 45 : 70,
+                    'no-match',
                 );
 
                 continue;
             }
-            foreach (array_unique([$identity['username'], $identity['email']]) as $poolIdentifier) {
+            foreach ($this->identityIdentifiers($identity) as $poolIdentifier) {
                 if ($username = $this->directory->resolveUsername($poolIdentifier)) {
                     return $username;
                 }
@@ -131,11 +132,10 @@ class LegacyMigrationService
 
         return Cache::lock('portal.recover.'.hash('sha256', strtolower($identity['email'])), 60)->block(3, function () use ($identity) {
             // A concurrent sign-up or migration always wins; do not overwrite it.
-            if ($this->directory->hasIdentity($identity['username'])) {
-                return $identity['username'];
-            }
-            if ($this->directory->hasIdentity($identity['email'])) {
-                return $identity['email'];
+            foreach ($this->identityIdentifiers($identity) as $poolIdentifier) {
+                if ($username = $this->directory->resolveUsername($poolIdentifier)) {
+                    return $username;
+                }
             }
 
             return $this->directory->provisionForPasswordRecovery($identity);
@@ -231,14 +231,13 @@ class LegacyMigrationService
                 throw new RuntimeException('The legacy account is missing required identity details. Please contact support.');
             }
             $preferredUsername = $username;
-            $username = 'wp_'.$user['id'];
         }
         if (! filter_var($username, FILTER_VALIDATE_EMAIL) && (strlen($username) > 128 || ! preg_match('/^[\p{L}\p{M}\p{S}\p{N}\p{P}]+$/uD', $username))) {
             throw new RuntimeException('The legacy username needs review before migration.');
         }
 
-        // Explicit whitelist: never import roles or admin flags. Email-style
-        // Cloud usernames are converted to unique names at provisioning time.
+        // Explicit whitelist: never import roles or admin flags. Legacy usernames
+        // that are emails are converted to unique names at provisioning time.
         $identity = ['source' => $source, 'id' => $user['id'], 'username' => $username, 'email' => strtolower($user['email']),
             'given_name' => trim((string) ($user['given_name'] ?? '')) ?: 'Unknown',
             'family_name' => trim((string) ($user['family_name'] ?? '')) ?: 'User'];
@@ -322,19 +321,19 @@ class LegacyMigrationService
         if (! $user) {
             throw new RuntimeException('Legacy password recovery returned an invalid response.');
         }
-        foreach (['id', 'user_login', 'email', 'first_name', 'last_name'] as $key) {
-            if ((! is_string($user[$key] ?? null) && ! is_int($user[$key] ?? null)) || trim((string) $user[$key]) === '' || strlen((string) $user[$key]) > 256) {
-                throw new RuntimeException('The legacy account is missing required identity details. Please contact support.');
-            }
-        }
-        if (! filter_var($user['email'], FILTER_VALIDATE_EMAIL)) {
-            throw new RuntimeException('The legacy account has an invalid email address. Please contact support.');
+
+        return $this->verifiedIdentity('wordpress', $data, $identifier, true);
+    }
+
+    private function identityIdentifiers(array $identity): array
+    {
+        $identifiers = [$identity['username'], $identity['email']];
+        if ($identity['source'] === 'wordpress') {
+            // Reuse accounts created by the previous WordPress migration scheme.
+            array_unshift($identifiers, 'wp_'.$identity['id']);
         }
 
-        return [
-            'source' => 'wordpress', 'id' => (string) $user['id'], 'username' => (string) $user['user_login'],
-            'email' => strtolower((string) $user['email']), 'given_name' => (string) $user['first_name'], 'family_name' => (string) $user['last_name'],
-        ];
+        return array_values(array_unique($identifiers));
     }
 
     private function validEndpoint(string $endpoint): bool

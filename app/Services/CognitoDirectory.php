@@ -149,9 +149,7 @@ class CognitoDirectory
 
     public function manage(string $username, string $action, array $input = []): void
     {
-        if (! config('sso.management_writes_enabled')) {
-            throw new RuntimeException('User management is currently read-only. Writes must be enabled by the portal operator.');
-        }
+        $this->assertWritesEnabled();
         $operation = match ($action) {
             'confirm' => 'adminConfirmSignUp', 'enable' => 'adminEnableUser', 'disable' => 'adminDisableUser',
             'reset_password' => 'adminResetUserPassword', 'sign_out' => 'adminUserGlobalSignOut', 'set_password' => 'adminSetUserPassword',
@@ -177,17 +175,11 @@ class CognitoDirectory
             $parameters['Password'] = $input['password'];
             $parameters['Permanent'] = ! ($input['temporary'] ?? false);
         }
-        try {
-            $this->client->$operation($parameters);
-        } catch (AwsException $e) {
-            throw new RuntimeException(match ($e->getAwsErrorCode()) {
-                'InvalidPasswordException' => 'The password does not meet the pool password policy.',
-                'UserNotFoundException' => 'This user no longer exists.',
-                'AccessDeniedException' => 'The portal’s AWS credentials do not allow this action.',
-                'NotAuthorizedException' => 'This action is not available for the user’s current status.',
-                default => 'The user update could not be completed. Refresh the user and try again.',
-            });
-        }
+        $this->call($operation, $parameters, [
+            'InvalidPasswordException' => 'The password does not meet the pool password policy.',
+            'UserNotFoundException' => 'This user no longer exists.',
+            'NotAuthorizedException' => 'This action is not available for the user’s current status.',
+        ]);
     }
 
     public function updateAttributes(string $username, array $attributes, string $actorRole): void
@@ -228,12 +220,15 @@ class CognitoDirectory
         }
     }
 
-    private function call(string $operation, array $parameters): void
+    private function call(string $operation, array $parameters, array $errorMessages = []): void
     {
         try {
             $this->client->$operation($parameters);
         } catch (AwsException $e) {
-            throw new RuntimeException($e->getAwsErrorCode() === 'AccessDeniedException' ? 'The portal’s AWS credentials do not allow this action.' : 'The user update could not be completed. Refresh the user and try again.');
+            throw new RuntimeException($errorMessages[$e->getAwsErrorCode()] ?? match ($e->getAwsErrorCode()) {
+                'AccessDeniedException' => 'The portal’s AWS credentials do not allow this action.',
+                default => 'The user update could not be completed. Refresh the user and try again.',
+            });
         }
     }
 
@@ -287,7 +282,7 @@ class CognitoDirectory
         if ((! $generateUsername && $this->hasIdentity($identity['username'])) || $this->hasIdentity($identity['email'])) {
             throw new RuntimeException('An account already exists. Sign in to it or contact support.');
         }
-        $base = $generateUsername ? $this->nameUsername($identity) : $identity['username'];
+        $base = $this->migrationUsername($identity);
         for ($attempt = 1; $attempt <= 100; $attempt++) {
             $username = $base.($attempt === 1 ? '' : '_'.$attempt);
             if ($generateUsername && $this->hasIdentity($username)) {
@@ -358,8 +353,12 @@ class CognitoDirectory
         });
     }
 
-    private function nameUsername(array $identity): string
+    private function migrationUsername(array $identity): string
     {
+        if (! filter_var($identity['username'], FILTER_VALIDATE_EMAIL)) {
+            return $identity['username'];
+        }
+
         $parts = [];
         foreach (['given_name', 'family_name'] as $attribute) {
             $part = preg_replace('/[^a-z0-9]/', '', strtolower(Str::ascii($identity[$attribute])));

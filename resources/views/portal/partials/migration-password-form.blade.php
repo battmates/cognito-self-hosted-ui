@@ -30,7 +30,7 @@
                 @if ($requirements[$key])<li data-requirement="{{ $key }}"><span aria-hidden="true">○</span><span>{{ $label }}</span></li>@endif
             @endforeach
         </ul>
-        <p class="portal-copy password-setup-note">Use this new password for future RSL single sign-on. Your original platform password will stay the same.</p>
+        <p class="portal-copy password-setup-note">Use this new password for future single sign-on. Your original platform password will stay the same.</p>
         <button type="submit" class="password-setup-submit">Create password and continue</button>
         @if ($standalone ?? false)
             <a class="password-setup-cancel portal-copy" href="{{ route('portal.login') }}">Back to sign in</a>

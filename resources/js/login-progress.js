@@ -41,11 +41,12 @@ if (form && dialog && typeof dialog.showModal === 'function') {
         list.replaceChildren(...steps.map((step, index) => {
             const item = document.createElement('li');
             const warning = step.state === 'unavailable' || step.state === 'rejected';
-            item.className = warning ? 'is-unavailable' : index === steps.length - 1 ? 'is-current' : 'is-complete';
+            const current = index === steps.length - 1 && step.state === 'checking';
+            item.className = warning ? 'is-unavailable' : current ? 'is-current' : 'is-complete';
             const marker = document.createElement('span');
             marker.className = 'login-progress-step-marker';
             marker.setAttribute('aria-hidden', 'true');
-            marker.textContent = warning ? '!' : index === steps.length - 1 ? '•' : '✓';
+            marker.textContent = warning ? '!' : current ? '•' : '✓';
             const label = document.createElement('span');
             label.textContent = step.message;
             item.append(marker, label);
@@ -84,7 +85,7 @@ if (form && dialog && typeof dialog.showModal === 'function') {
         form.setAttribute('aria-busy', 'true');
         delete dialog.dataset.state;
         title.textContent = creating ? 'Setting up your account' : 'Signing you in';
-        message.textContent = creating ? 'Creating your single sign-on account with your new password.' : 'Connecting securely to RSL single sign-on.';
+        message.textContent = creating ? 'Creating your single sign-on account with your new password.' : 'Connecting securely to single sign-on.';
         reassurance.textContent = 'Please keep this window open. You only need to submit once.';
         dismiss.hidden = true;
         dialog.querySelector('.login-progress-result').hidden = true;
@@ -180,6 +181,7 @@ if (form && dialog && typeof dialog.showModal === 'function') {
             document.querySelectorAll('input[name="_token"]').forEach((input) => { input.value = data.csrf_token; });
         }
         if (!response.ok) {
+            if (Array.isArray(data.steps)) update(data.steps);
             const detail = Object.values(data.errors ?? {}).flat()[0];
             const fallback = response.status === 419 ? 'Your sign-in page has expired. Reload the page and try again.'
                 : response.status === 429 ? 'There have been too many attempts. Please wait a minute before trying again.'

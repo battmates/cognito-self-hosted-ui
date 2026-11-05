@@ -41,7 +41,7 @@ class CloudMigrationClient
                 return null;
             }
             if (is_array($data['user'] ?? null)) {
-                throw new ProviderCredentialsException('RSL Cloud');
+                throw new ProviderCredentialsException('Cloud');
             }
         }
         $challenge = (string) $response->header('WWW-Authenticate');

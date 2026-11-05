@@ -8,6 +8,7 @@ use Aws\Command;
 use Aws\Exception\AwsException;
 use Aws\Result;
 use Illuminate\Support\Facades\Log;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 class AdminUsersTest extends TestCase
@@ -93,6 +94,7 @@ class AdminUsersTest extends TestCase
         $this->mock(CognitoDirectory::class, function ($mock) {
             $mock->shouldReceive('get')->with('admin-user')->twice()->andReturn(['Enabled' => true]);
             $mock->shouldReceive('isAdministrator')->twice()->andReturn(true);
+            $mock->shouldReceive('attributes')->with(['Enabled' => true])->twice()->andReturn([]);
             $mock->shouldReceive('createUser')->once()->with(\Mockery::on(fn ($input) => $input['role'] === 'tutor' && $input['new_role'] === 'tutor'), '')->andReturnNull();
             $mock->shouldReceive('updateAttributes')->once()->with('target', \Mockery::on(fn ($attributes) => $attributes['custom:user_role'] === 'tutor'), '')->andReturnNull();
         });
@@ -104,6 +106,53 @@ class AdminUsersTest extends TestCase
         $this->withSession($this->adminSession())->post('/admin/users/attributes', [
             'username' => 'target', 'role' => '__new__', 'new_role' => 'tutor',
         ])->assertSessionHas('portal.notice', 'User attributes updated successfully.');
+    }
+
+    #[DataProvider('roleAssignmentCases')]
+    public function test_role_assignment_uses_current_directory_role(string $action, string $sessionRole, string $currentRole, string $assignedRole, bool $allowed): void
+    {
+        config(['sso.management_writes_enabled' => true]);
+        $client = $this->mock(CognitoIdentityProviderClient::class);
+        $client->shouldReceive('adminGetUser')->once()->with(\Mockery::on(fn ($input) => $input['Username'] === 'admin-user'))->andReturn(new Result([
+            'Username' => 'admin-user', 'Enabled' => true, 'UserStatus' => 'CONFIRMED',
+            'UserAttributes' => [['Name' => 'custom:user_role', 'Value' => $currentRole]],
+        ]));
+        if ($allowed) {
+            $operation = $action === 'create' ? 'adminCreateUser' : 'adminUpdateUserAttributes';
+            $client->shouldReceive($operation)->once()->with(\Mockery::on(fn ($input) => $input['Username'] === 'target'
+                && in_array(['Name' => 'custom:user_role', 'Value' => $assignedRole], $input['UserAttributes'], true)))->andReturn(new Result);
+        } else {
+            $client->shouldNotReceive('adminCreateUser');
+            $client->shouldNotReceive('adminSetUserPassword');
+            $client->shouldNotReceive('adminUpdateUserAttributes');
+        }
+        $session = $this->adminSession();
+        $session['auth']['status']['user']['user_role'] = $sessionRole;
+        $response = $this->withSession($session)->postJson('/admin/users/'.$action, [
+            'username' => 'target', 'email' => 'target@example.test', 'role' => $assignedRole,
+            'password' => 'Password123!', 'password_confirmation' => 'Password123!', 'temporary' => true,
+            // Submitted values must not override the middleware's verified actor.
+            'portal.actor' => ['UserAttributes' => [['Name' => 'custom:user_role', 'Value' => 'administrator']]],
+        ]);
+        if ($allowed) {
+            $response->assertRedirect()->assertSessionHas('portal.notice');
+        } else {
+            $response->assertUnprocessable()->assertJsonValidationErrors($action === 'create' ? 'create' : 'attributes');
+        }
+    }
+
+    public static function roleAssignmentCases(): array
+    {
+        $cases = [];
+        foreach (['create', 'attributes'] as $action) {
+            foreach (['admin', 'administrator'] as $role) {
+                $cases[$action.' downgrade blocks '.$role] = [$action, 'administrator', 'ops_manager', $role, false];
+            }
+            $cases[$action.' promotion permits administrator'] = [$action, 'ops_manager', 'administrator', 'administrator', true];
+            $cases[$action.' operations manager permits tutor'] = [$action, 'administrator', 'ops_manager', 'tutor', true];
+        }
+
+        return $cases;
     }
 
     public function test_admin_action_requires_confirmation_and_self_disable_is_blocked(): void
@@ -123,6 +172,43 @@ class AdminUsersTest extends TestCase
         $client = $this->mock(CognitoIdentityProviderClient::class);
         $client->shouldReceive('adminSetUserPassword')->once()->with(\Mockery::on(fn ($input) => $input['Username'] === 'target' && $input['Password'] === 'TestPassword123!' && $input['Permanent'] === false));
         (new CognitoDirectory($client))->manage('target', 'set_password', ['password' => 'TestPassword123!', 'temporary' => true]);
+    }
+
+    #[DataProvider('directoryWriteErrors')]
+    public function test_management_actions_preserve_their_aws_error_messages(string $code, string $message): void
+    {
+        config(['sso.management_writes_enabled' => true]);
+        $client = $this->mock(CognitoIdentityProviderClient::class);
+        $client->shouldReceive('adminSetUserPassword')->once()
+            ->andThrow(new AwsException('AWS failure', new Command('AdminSetUserPassword'), ['code' => $code]));
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage($message);
+        (new CognitoDirectory($client))->manage('target', 'set_password', ['password' => 'TestPassword123!']);
+    }
+
+    #[DataProvider('directoryWriteErrors')]
+    public function test_attribute_updates_keep_their_existing_aws_error_messages(string $code, string $message): void
+    {
+        config(['sso.management_writes_enabled' => true]);
+        $client = $this->mock(CognitoIdentityProviderClient::class);
+        $client->shouldReceive('adminUpdateUserAttributes')->once()
+            ->andThrow(new AwsException('AWS failure', new Command('AdminUpdateUserAttributes'), ['code' => $code]));
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage($code === 'AccessDeniedException' ? $message : 'The user update could not be completed. Refresh the user and try again.');
+        (new CognitoDirectory($client))->updateAttributes('target', ['given_name' => 'Alex'], 'administrator');
+    }
+
+    public static function directoryWriteErrors(): array
+    {
+        return [
+            ['InvalidPasswordException', 'The password does not meet the pool password policy.'],
+            ['UserNotFoundException', 'This user no longer exists.'],
+            ['AccessDeniedException', 'The portal’s AWS credentials do not allow this action.'],
+            ['NotAuthorizedException', 'This action is not available for the user’s current status.'],
+            ['InternalErrorException', 'The user update could not be completed. Refresh the user and try again.'],
+        ];
     }
 
     public function test_live_search_returns_filtered_rows_and_load_more_without_the_page_layout(): void

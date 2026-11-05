@@ -11,6 +11,12 @@ export default defineConfig({
         tailwindcss(),
     ],
     server: {
+        ...(process.env.VITE_DEV_SERVER_HOST ? {
+            host: '0.0.0.0',
+            port: 5173,
+            strictPort: true,
+            hmr: { host: process.env.VITE_DEV_SERVER_HOST },
+        } : {}),
         watch: {
             ignored: ['**/storage/framework/views/**'],
         },

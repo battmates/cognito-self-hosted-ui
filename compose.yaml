@@ -14,6 +14,21 @@ x-app: &app
   restart: unless-stopped
 
 services:
+  vite:
+    image: node:22-bookworm-slim
+    working_dir: /var/www/html
+    init: true
+    command: ["sh", "-c", "npm ci && exec npm run dev"]
+    environment:
+      APP_URL: ${APP_URL:-http://localhost:8000}
+      VITE_DEV_SERVER_HOST: localhost
+    ports:
+      - "127.0.0.1:5173:5173"
+    volumes:
+      - .:/var/www/html
+      - dev-node-modules:/var/www/html/node_modules
+    restart: unless-stopped
+
   database:
     image: mysql:8.4
     profiles: ["local-db"]
@@ -63,3 +78,4 @@ volumes:
   mysql-data:
   dev-vendor:
   dev-bootstrap-cache:
+  dev-node-modules:

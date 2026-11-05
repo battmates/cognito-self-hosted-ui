@@ -137,6 +137,13 @@ class AuthPortalController extends Controller
                     ? response()->json($setup + ['csrf_token' => $request->session()->token()])
                     : redirect()->route('portal.login.migration.password', ['challenge' => $setup['challenge_id']]);
             } catch (RuntimeException $exception) {
+                if ($request->expectsJson() && ! empty($validated['login_progress'])) {
+                    return response()->json([
+                        'message' => $exception->getMessage(),
+                        'errors' => ['email' => [$exception->getMessage()]],
+                        'steps' => app(LoginProgress::class)->read($validated['login_progress'])['steps'],
+                    ], 422);
+                }
                 throw ValidationException::withMessages([
                     'email' => [$exception->getMessage()],
                 ]);

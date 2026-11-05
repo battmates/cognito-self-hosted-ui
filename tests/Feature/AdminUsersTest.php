@@ -174,6 +174,43 @@ class AdminUsersTest extends TestCase
         (new CognitoDirectory($client))->manage('target', 'set_password', ['password' => 'TestPassword123!', 'temporary' => true]);
     }
 
+    #[DataProvider('directoryWriteErrors')]
+    public function test_management_actions_preserve_their_aws_error_messages(string $code, string $message): void
+    {
+        config(['sso.management_writes_enabled' => true]);
+        $client = $this->mock(CognitoIdentityProviderClient::class);
+        $client->shouldReceive('adminSetUserPassword')->once()
+            ->andThrow(new AwsException('AWS failure', new Command('AdminSetUserPassword'), ['code' => $code]));
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage($message);
+        (new CognitoDirectory($client))->manage('target', 'set_password', ['password' => 'TestPassword123!']);
+    }
+
+    #[DataProvider('directoryWriteErrors')]
+    public function test_attribute_updates_keep_their_existing_aws_error_messages(string $code, string $message): void
+    {
+        config(['sso.management_writes_enabled' => true]);
+        $client = $this->mock(CognitoIdentityProviderClient::class);
+        $client->shouldReceive('adminUpdateUserAttributes')->once()
+            ->andThrow(new AwsException('AWS failure', new Command('AdminUpdateUserAttributes'), ['code' => $code]));
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage($code === 'AccessDeniedException' ? $message : 'The user update could not be completed. Refresh the user and try again.');
+        (new CognitoDirectory($client))->updateAttributes('target', ['given_name' => 'Alex'], 'administrator');
+    }
+
+    public static function directoryWriteErrors(): array
+    {
+        return [
+            ['InvalidPasswordException', 'The password does not meet the pool password policy.'],
+            ['UserNotFoundException', 'This user no longer exists.'],
+            ['AccessDeniedException', 'The portal’s AWS credentials do not allow this action.'],
+            ['NotAuthorizedException', 'This action is not available for the user’s current status.'],
+            ['InternalErrorException', 'The user update could not be completed. Refresh the user and try again.'],
+        ];
+    }
+
     public function test_live_search_returns_filtered_rows_and_load_more_without_the_page_layout(): void
     {
         $this->mock(CognitoDirectory::class, function ($mock) {

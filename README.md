@@ -28,11 +28,11 @@ Run `composer run dev` for the full Laravel/Vite stack, or `php artisan serve` a
 
 ## Docker
 
-The single `compose.yaml` configures local development: application code is mounted from your working directory, PHP caching is disabled, and the queue listener reloads code between jobs. Save PHP, route, configuration or Blade template changes and refresh the browser; no image rebuild is needed. Run `npm run dev` on the host for live CSS/JavaScript updates, or `npm run build` to refresh the assets in `public/build`. Run `npm ci` first on a fresh checkout. The local setup uses separate volumes for container PHP dependencies and Laravel bootstrap caches, while retaining the existing persistent storage and database volumes.
+The single `compose.yaml` configures local development: application code is mounted from your working directory, PHP caching is disabled, and the queue listener reloads code between jobs. Save PHP, route, configuration or Blade template changes and refresh the browser; no image rebuild is needed. The `vite` service installs frontend dependencies and runs the CSS/JavaScript development server inside Docker, with live updates on port 5173. It starts with `docker compose up -d`; no separate host terminal is needed. Frontend dependencies use their own Docker volume. The local setup uses separate volumes for container PHP dependencies and Laravel bootstrap caches, while retaining the existing persistent storage and database volumes.
 
 After changing `.env`, run `docker compose up -d --force-recreate` so all services receive the updated settings. If Composer dependencies change, run `docker compose exec app composer install --no-dev --optimize` and restart the background services. Rebuild only for Dockerfile, system dependency or image configuration changes. The Compose setup is for local development; the Dockerfile retains a separate `production` image target for deployment.
 
-Docker Compose uses the existing `.env` for the web app, queue worker and scheduler. Keep the same `APP_KEY`, Cognito, AWS, database, session and migration settings. The `.env` file and local credentials are excluded from the image; frontend assets and production PHP dependencies are built into it. Composer is not required on the host. For local development, Node is used on the host to build or serve frontend assets; the production image includes its own built assets.
+Docker Compose uses the existing `.env` for the web app, queue worker and scheduler. Keep the same `APP_KEY`, Cognito, AWS, database, session and migration settings. The `.env` file and local credentials are excluded from the image; frontend assets and production PHP dependencies are built into it. Composer is not required on the host. Node runs in the `vite` container for local development; the production image includes its own built assets. Node is not required on the host.
 
 ```sh
 docker compose build
@@ -40,6 +40,8 @@ docker compose build
 docker compose run --rm app php artisan migrate --force
 docker compose up -d
 ```
+
+View frontend output with `docker compose logs -f vite` (or select the `vite` container in Docker Desktop). To build assets without live updates, run `docker compose stop vite`, then `docker compose run --rm --no-deps vite sh -c "npm ci && npm run build"`. If a forced shutdown leaves `public/hot` behind, remove that file so Laravel uses the built assets.
 
 Open `http://localhost:8000` (or the hostname configured in `APP_URL`). Set `DOCKER_PORT` in `.env` to change the published port, and update `APP_URL` and any explicitly configured callback URLs to match. Cognito callbacks must remain registered with Cognito. For a fresh installation only, copy `.env.example` to `.env` and generate a key with `docker compose run --rm app php artisan key:generate --show`, then save that value as `APP_KEY` in `.env` before migrating. Existing installations must retain their key.
 
@@ -59,7 +61,7 @@ The `app-storage` volume preserves logs, uploads, file sessions/cache and the de
 
 ```sh
 docker compose ps
-docker compose logs -f app queue scheduler
+docker compose logs -f app queue scheduler vite
 # Apply .env changes to all services:
 docker compose up -d --force-recreate
 # Rebuild after Dockerfile or system dependency changes:

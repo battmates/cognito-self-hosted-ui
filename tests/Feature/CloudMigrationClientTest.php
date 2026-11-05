@@ -166,10 +166,32 @@ class CloudMigrationClientTest extends TestCase
     public static function rejectedCloudCredentials(): array
     {
         return [
-            'negative account response' => [['authenticated' => false, 'user' => null], []],
-            'negative flag without user field' => [['authenticated' => false], []],
-            'negative flag with generic Bearer header' => [['authenticated' => false], ['WWW-Authenticate' => 'Bearer']],
-            'explicit account rejection with Bearer error' => [['authenticated' => false, 'user' => null], ['WWW-Authenticate' => 'Bearer error="invalid_token"']],
+            'known account rejection' => [['authenticated' => false, 'user' => ['id' => 'cloud-123']], []],
+            'known account rejection with generic Bearer header' => [['authenticated' => false, 'user' => ['id' => 'cloud-123']], ['WWW-Authenticate' => 'Bearer']],
+            'known account rejection with Bearer error' => [['authenticated' => false, 'user' => ['id' => 'cloud-123']], ['WWW-Authenticate' => 'Bearer error="invalid_token"']],
+        ];
+    }
+
+    #[DataProvider('unmatchedCloudCredentials')]
+    public function test_401_without_a_matching_cloud_user_allows_provider_fallback(array $body, array $headers): void
+    {
+        Http::fake([
+            'https://cloud.example.test/Account/generate-token*' => Http::response(['Token' => 'cached-bearer', 'ExpireTime' => now()->addHour()->toIso8601String()]),
+            'https://cloud.example.test/backstage/ssoauthenticate' => Http::response($body, 401, $headers),
+        ]);
+
+        $this->assertNull((new CloudMigrationClient)->authenticate($this->provider(), 'person@example.com', 'password'));
+        Http::assertSentCount(2);
+    }
+
+    public static function unmatchedCloudCredentials(): array
+    {
+        return [
+            'null user' => [['authenticated' => false, 'user' => null], []],
+            'missing user field' => [['authenticated' => false], []],
+            'missing user with generic Bearer header' => [['authenticated' => false], ['WWW-Authenticate' => 'Bearer']],
+            'null user with generic Bearer header' => [['authenticated' => false, 'user' => null], ['WWW-Authenticate' => 'Bearer']],
+            'null user with Bearer error' => [['authenticated' => false, 'user' => null], ['WWW-Authenticate' => 'Bearer error="invalid_token"']],
         ];
     }
 

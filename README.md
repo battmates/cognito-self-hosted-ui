@@ -8,7 +8,7 @@ See [the implementation plan and outstanding decisions](docs/IMPLEMENTATION_PLAN
 
 ## Local setup
 
-Requires PHP 8.2+, Composer 2, Node 20.19+ and SQLite (or another Laravel database). Composer resolves dependencies against PHP 8.2. The official AWS PHP SDK supplies IAM-signed directory operations.
+Requires PHP 8.2+, Composer 2, Node 22 (22.12.0 or newer) and SQLite (or another Laravel database). Composer resolves dependencies against PHP 8.2. The official AWS PHP SDK supplies IAM-signed directory operations.
 
 ```sh
 composer install
@@ -28,7 +28,11 @@ Run `composer run dev` for the full Laravel/Vite stack, or `php artisan serve` a
 
 ## Docker
 
-Docker Compose uses the existing `.env` for the web app, queue worker and scheduler. Keep the same `APP_KEY`, Cognito, AWS, database, session and migration settings. The `.env` file and local credentials are excluded from the image; frontend assets and production PHP dependencies are built into it. Node and Composer are not required on the host.
+The single `compose.yaml` configures local development: application code is mounted from your working directory, PHP caching is disabled, and the queue listener reloads code between jobs. Save PHP, route, configuration or Blade template changes and refresh the browser; no image rebuild is needed. Run `npm run dev` on the host for live CSS/JavaScript updates, or `npm run build` to refresh the assets in `public/build`. Run `npm ci` first on a fresh checkout. The local setup uses separate volumes for container PHP dependencies and Laravel bootstrap caches, while retaining the existing persistent storage and database volumes.
+
+After changing `.env`, run `docker compose up -d --force-recreate` so all services receive the updated settings. If Composer dependencies change, run `docker compose exec app composer install --no-dev --optimize` and restart the background services. Rebuild only for Dockerfile, system dependency or image configuration changes. The Compose setup is for local development; the Dockerfile retains a separate `production` image target for deployment.
+
+Docker Compose uses the existing `.env` for the web app, queue worker and scheduler. Keep the same `APP_KEY`, Cognito, AWS, database, session and migration settings. The `.env` file and local credentials are excluded from the image; frontend assets and production PHP dependencies are built into it. Composer is not required on the host. For local development, Node is used on the host to build or serve frontend assets; the production image includes its own built assets.
 
 ```sh
 docker compose build
@@ -58,7 +62,7 @@ docker compose ps
 docker compose logs -f app queue scheduler
 # Apply .env changes to all services:
 docker compose up -d --force-recreate
-# Rebuild after source changes:
+# Rebuild after Dockerfile or system dependency changes:
 docker compose up -d --build
 docker compose down
 ```
@@ -97,7 +101,7 @@ The local repository contracts and portal are tested; a live switch of staging a
 
 `COGNITO_MANAGEMENT_WRITES_ENABLED=true` enables the administrator actions and is the current setting/default. The user has authorised editable administration. Set it to `false` only when read-only maintenance is needed; the existing role checks, CSRF protection, action confirmation and audit events still apply. Portal migrations remain separately disabled. Before production, review who can write the existing admin role attributes across every pool app client: the portal relies on those attributes as the requested authority and does not change their Cognito permissions.
 
-WordPress and RSL Cloud migrations use independent environment-configured credential-verification adapters. All migration settings are disabled by default. Missing Cognito users are verified in WordPress first, then Cloud only if WordPress has no match. Cloud service tokens are cached until their reported expiry. Unverified email, existing-account replacement, imported roles and provider failures block migration. See the [API contracts, Cloud configuration and reconciliation constraints](docs/MIGRATIONS.md) before enabling migration. WordPress uses the signed HMAC endpoint and preserves Lambda-compatible `wp_<ID>` usernames with `preferred_username` aliases. Existing Cognito migration triggers remain unchanged.
+WordPress and RSL Cloud migrations use independent environment-configured credential-verification adapters. All migration settings are disabled by default. Missing Cognito users are verified in Cloud first, then MusicTeacher (WordPress) if Cloud has no match. A validated MusicTeacher sign-in journey gives MusicTeacher priority before Cloud; Cognito is always checked first. Cloud service tokens are cached until their reported expiry. If a verified legacy password is rejected by Cognito’s password policy before account creation, a new-password modal lets the user choose and confirm a stronger single sign-on password, then completes migration and sign-in. The original platform password is unchanged. Only a verified identity can be migrated; existing-account replacement and imported roles remain blocked. An unavailable provider is skipped so the next provider can verify the account. If none verifies it, the portal explains which services could not be checked and asks the user to try again later. See the [API contracts, Cloud configuration and reconciliation constraints](docs/MIGRATIONS.md) before enabling migration. WordPress uses the signed HMAC endpoint and preserves Lambda-compatible `wp_<ID>` usernames with `preferred_username` aliases. Existing Cognito migration triggers remain unchanged.
 
 ## Verification and operations
 

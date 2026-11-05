@@ -61,6 +61,7 @@ jobs:
       - name: Install PHP dependencies and test
         run: |
           composer install --prefer-dist --no-interaction --no-progress
+          cp .env.example .env
           php artisan test
         env:
           APP_KEY: base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=

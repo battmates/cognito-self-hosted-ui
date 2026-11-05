@@ -2,17 +2,29 @@
 
 namespace Tests\Feature;
 
+use App\Exceptions\MigrationPasswordRequiredException;
 use App\Services\CognitoDirectory;
 use Aws\CognitoIdentityProvider\CognitoIdentityProviderClient;
 use Aws\Command;
 use Aws\Exception\AwsException;
 use Aws\Result;
+use Illuminate\Support\Facades\Log;
 use Mockery;
 use RuntimeException;
 use Tests\TestCase;
 
 class CognitoMigrationUsernameTest extends TestCase
 {
+    public function test_password_setup_uses_the_configured_pool_requirements(): void
+    {
+        $client = $this->mock(CognitoIdentityProviderClient::class);
+        $client->shouldReceive('describeUserPool')->once()->andReturn(new Result(['UserPool' => ['Policies' => ['PasswordPolicy' => [
+            'MinimumLength' => 12, 'RequireUppercase' => true, 'RequireLowercase' => true, 'RequireNumbers' => true, 'RequireSymbols' => true,
+        ]]]]));
+
+        $this->assertSame(['minimum_length' => 12, 'uppercase' => true, 'lowercase' => true, 'numbers' => true, 'symbols' => true], (new CognitoDirectory($client))->migrationPasswordPolicy());
+    }
+
     private function identity(array $overrides = []): array
     {
         return array_merge([
@@ -135,6 +147,44 @@ class CognitoMigrationUsernameTest extends TestCase
         $client->shouldReceive('adminCreateUser')->once()->andReturn(new Result);
         $client->shouldReceive('adminSetUserPassword')->once()->andThrow(new AwsException('Unavailable', new Command('AdminSetUserPassword'), ['code' => 'InternalErrorException']));
         $this->expectExceptionMessage('Account migration could not be completed.');
+
+        $directory->provision($this->identity(), 'Password123!');
+    }
+
+    public function test_password_policy_failure_is_distinct_from_incorrect_credentials_and_logs_only_safe_diagnostics(): void
+    {
+        Log::spy();
+        $client = $this->mock(CognitoIdentityProviderClient::class);
+        $directory = $this->directory($client);
+        $directory->shouldReceive('hasIdentity')->with('person@example.com')->once()->andReturn(false);
+        $directory->shouldReceive('hasIdentity')->with('aaron.osullivan')->once()->andReturn(false);
+        $client->shouldReceive('adminCreateUser')->once()->andThrow(new AwsException('Sensitive request: password=private-password person@example.com', new Command('AdminCreateUser'), ['code' => 'InvalidPasswordException']));
+        $client->shouldNotReceive('adminSetUserPassword');
+
+        try {
+            $directory->provision($this->identity(), 'private-password');
+            $this->fail('Password policy rejection must stop migration.');
+        } catch (RuntimeException $exception) {
+            $this->assertInstanceOf(MigrationPasswordRequiredException::class, $exception);
+            $this->assertSame('Create a stronger password to finish setting up single sign-on.', $exception->getMessage());
+            $this->assertNull($exception->getPrevious());
+        }
+
+        Log::shouldHaveReceived('error')->once()->with('portal.migration.failed', [
+            'operation' => 'AdminCreateUser', 'aws_error' => 'InvalidPasswordException', 'aws_request_id' => null,
+            'username_hash' => hash('sha256', 'aaron.osullivan'), 'account_created' => false,
+        ]);
+    }
+
+    public function test_migration_permission_failure_explains_the_configuration_problem(): void
+    {
+        $client = $this->mock(CognitoIdentityProviderClient::class);
+        $directory = $this->directory($client);
+        $directory->shouldReceive('hasIdentity')->with('person@example.com')->once()->andReturn(false);
+        $directory->shouldReceive('hasIdentity')->with('aaron.osullivan')->once()->andReturn(false);
+        $client->shouldReceive('adminCreateUser')->once()->andThrow(new AwsException('Denied', new Command('AdminCreateUser'), ['code' => 'AccessDeniedException']));
+        $client->shouldNotReceive('adminSetUserPassword');
+        $this->expectExceptionMessage('AWS credentials do not allow account migration');
 
         $directory->provision($this->identity(), 'Password123!');
     }

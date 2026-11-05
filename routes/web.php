@@ -7,16 +7,27 @@ use App\Http\Controllers\OAuthController;
 use App\Http\Controllers\SesWebhookController;
 use App\Http\Middleware\PortalSession;
 use App\Http\Middleware\RequirePortalAdmin;
+use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
+use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Route;
+use Illuminate\View\Middleware\ShareErrorsFromSession;
 
 Route::post('/oauth2/token', [OAuthController::class, 'token'])->middleware('throttle:60,1');
 Route::post('/webhooks/ses-events', [SesWebhookController::class, 'handle'])->middleware('throttle:120,1')->name('portal.webhooks.ses-events');
+
+// Polling is stateless: it must not overwrite a concurrent login's session.
+Route::get('/login/progress/{attempt}', [AuthPortalController::class, 'loginProgress'])
+    ->whereUuid('attempt')->middleware('signed')
+    ->withoutMiddleware([StartSession::class, ShareErrorsFromSession::class, ValidateCsrfToken::class])
+    ->name('portal.login.progress');
 
 Route::middleware(PortalSession::class)->group(function () {
 
     Route::get('/', [AuthPortalController::class, 'home'])->name('portal.home');
     Route::get('/login', [AuthPortalController::class, 'login'])->name('portal.login');
     Route::post('/login', [AuthPortalController::class, 'storeLogin'])->middleware('throttle:10,1')->name('portal.login.store');
+    Route::get('/login/migration-password', [AuthPortalController::class, 'migrationPassword'])->name('portal.login.migration.password');
+    Route::post('/login/migration-password', [AuthPortalController::class, 'storeMigrationPassword'])->middleware('throttle:6,1')->name('portal.login.migration.password.store');
     Route::get('/login/{provider}', [AuthPortalController::class, 'redirectToSocialProvider'])->name('portal.login.provider');
     Route::get('/auth/callback', [AuthPortalController::class, 'handleSocialCallback'])->name('portal.login.provider.callback');
     Route::get('/register', [AuthPortalController::class, 'register'])->name('portal.register');

@@ -30,6 +30,33 @@ class CognitoIdentityTest extends TestCase
         return JWT::encode(array_merge(['iss' => 'https://cognito-idp.eu-west-2.amazonaws.com/test-pool', 'aud' => 'test-client', 'token_use' => 'id', 'sub' => 'subject-1', 'cognito:username' => 'canonical-user', 'email' => 'test@example.com', 'custom:user_role' => 'administrator', 'iat' => time(), 'exp' => time() + 3600], $overrides), $this->privateKey, 'RS256', 'test-key');
     }
 
+    public function test_login_passes_application_context_to_legacy_provider_selection(): void
+    {
+        config(['migration.enabled' => true]);
+        $context = ['consumer' => 'musicteacher', 'portal_request' => 'test-journey'];
+        $this->mock(LegacyMigrationService::class)->shouldReceive('resolve')->once()
+            ->with('test@example.com', 'Password123!', $context)->andReturn('wp_123');
+        Http::fake(['*' => Http::response(['ChallengeName' => 'SOFTWARE_TOKEN_MFA', 'Session' => 'challenge-session'])]);
+
+        $result = app(CognitoIdentityService::class)->login('test@example.com', 'Password123!', $context);
+
+        $this->assertSame('SOFTWARE_TOKEN_MFA', $result['challenge']['name']);
+        Http::assertSent(fn ($request) => $request['AuthParameters']['USERNAME'] === 'wp_123');
+    }
+
+    public function test_completed_migration_signs_in_directly_with_the_new_password(): void
+    {
+        config(['migration.enabled' => true]);
+        $this->mock(LegacyMigrationService::class)->shouldNotReceive('resolve');
+        Http::fake(['*' => Http::response(['AuthenticationResult' => ['IdToken' => $this->token(), 'AccessToken' => 'access', 'ExpiresIn' => 3600]])]);
+
+        $result = app(CognitoIdentityService::class)->loginWithCognito('canonical-user', 'NewPassword123!');
+
+        $this->assertSame('canonical-user', $result['tokens']['refresh_username']);
+        Http::assertSent(fn ($request) => $request['AuthParameters']['PASSWORD'] === 'NewPassword123!');
+        Http::assertSentCount(1);
+    }
+
     public function test_password_auth_validates_token_and_uses_canonical_username_for_refresh(): void
     {
         Http::fake(['*' => Http::response(['AuthenticationResult' => ['IdToken' => $this->token(), 'AccessToken' => 'access', 'RefreshToken' => 'refresh', 'ExpiresIn' => 3600]])]);

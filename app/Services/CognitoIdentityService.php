@@ -19,9 +19,17 @@ class CognitoIdentityService
 
     public function login(string $username, string $password, array $context = []): array
     {
+        app(LoginProgress::class)->report('cognito', 'Checking your RSL single sign-on account.', 12);
         if (config('migration.enabled')) {
-            $username = app(LegacyMigrationService::class)->resolve($username, $password);
+            $username = app(LegacyMigrationService::class)->resolve($username, $password, $context);
         }
+
+        return $this->loginWithCognito($username, $password, $context);
+    }
+
+    public function loginWithCognito(string $username, string $password, array $context = []): array
+    {
+        app(LoginProgress::class)->report('authenticate', 'Verifying your sign-in and preparing secure access.', 92);
         $payload = $this->call('InitiateAuth', [
             'AuthFlow' => config('services.cognito.auth_flow', 'USER_PASSWORD_AUTH'),
             'ClientId' => config('services.cognito.client_id'),

@@ -40,3 +40,10 @@ RUN mkdir -p storage/app/private storage/app/public storage/framework/cache/data
 EXPOSE 80
 ENTRYPOINT ["app-entrypoint"]
 CMD ["apache2-foreground"]
+
+# Opt-in development target; the default image remains suitable for deployment.
+FROM app AS development
+COPY --from=composer:2 /usr/bin/composer /usr/local/bin/composer
+RUN composer dump-autoload --no-dev --optimize --no-interaction --no-scripts
+
+FROM app AS production

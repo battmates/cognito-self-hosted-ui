@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Services\LoginProgress;
 use Aws\CloudWatch\CloudWatchClient;
 use Aws\CognitoIdentityProvider\CognitoIdentityProviderClient;
 use Aws\SesV2\SesV2Client;
@@ -14,6 +15,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        $this->app->scoped(LoginProgress::class);
+
         foreach ([SesV2Client::class, CloudWatchClient::class] as $clientClass) {
             $this->app->singleton($clientClass, function () use ($clientClass) {
                 $options = ['version' => 'latest', 'region' => config('ses_reporting.region'), 'http' => ['connect_timeout' => 5, 'timeout' => 15], 'retries' => 1];

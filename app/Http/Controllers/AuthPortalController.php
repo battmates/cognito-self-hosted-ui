@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\MigrationPasswordRequiredException;
 use App\Services\AuthorizationBroker;
 use App\Services\CognitoIdentityService;
 use App\Services\LoginProgress;
+use App\Services\MigrationPasswordChallenge;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -124,6 +126,16 @@ class AuthPortalController extends Controller
             }
             try {
                 $result = $this->identity->login($validated['email'], $validated['password'], $context);
+            } catch (MigrationPasswordRequiredException $exception) {
+                $request->session()->forget(['auth.status', 'auth.tokens', 'portal.challenge']);
+                $request->session()->regenerate();
+                $setup = app(MigrationPasswordChallenge::class)->start(
+                    $request->session()->getId(), $exception->identity, $context, $request->session()->get('portal.authorization'),
+                );
+
+                return $request->expectsJson()
+                    ? response()->json($setup + ['csrf_token' => $request->session()->token()])
+                    : redirect()->route('portal.login.migration.password', ['challenge' => $setup['challenge_id']]);
             } catch (RuntimeException $exception) {
                 throw ValidationException::withMessages([
                     'email' => [$exception->getMessage()],
@@ -137,6 +149,52 @@ class AuthPortalController extends Controller
         } finally {
             $lock->release();
         }
+    }
+
+    public function migrationPassword(Request $request): View|RedirectResponse
+    {
+        try {
+            $input = $request->validate(['challenge' => ['required', 'uuid']]);
+            $setup = app(MigrationPasswordChallenge::class)->show($request->session()->getId(), $input['challenge']);
+        } catch (ValidationException) {
+            return redirect()->route('portal.login')->with('portal.error', 'Your password setup has expired. Please sign in again.');
+        }
+
+        return view('portal.migration-password', ['setup' => $setup]);
+    }
+
+    public function storeMigrationPassword(Request $request): RedirectResponse|JsonResponse
+    {
+        $input = $request->validate([
+            'challenge' => ['required', 'uuid'], 'password' => ['required', 'string', 'confirmed', 'max:256'],
+            'login_progress' => ['nullable', 'uuid'],
+        ]);
+        $created = false;
+        try {
+            if (! empty($input['login_progress'])) {
+                app(LoginProgress::class)->begin($input['login_progress']);
+            }
+            $completed = app(MigrationPasswordChallenge::class)->complete($request->session()->getId(), $input['challenge'], $input['password']);
+            $created = true;
+            if ($completed['authorization']) {
+                $request->session()->put('portal.authorization', $completed['authorization']);
+            } else {
+                $request->session()->forget('portal.authorization');
+            }
+            $result = $this->identity->loginWithCognito($completed['username'], $input['password'], $completed['context']);
+        } catch (RuntimeException $exception) {
+            $message = $created
+                ? 'Your single sign-on account was created, but sign-in could not be completed. Please sign in with your new password.'
+                : $exception->getMessage();
+            if ($request->expectsJson()) {
+                return response()->json(['errors' => ['password' => [$message]], 'restart_required' => true], 422);
+            }
+
+            return redirect()->route('portal.login')->with('portal.error', $message);
+        }
+        $response = $this->acceptAuthentication($request, $result);
+
+        return $request->expectsJson() ? response()->json(['redirect' => $response->getTargetUrl()]) : $response;
     }
 
     private function acceptAuthentication(Request $request, array $result): RedirectResponse

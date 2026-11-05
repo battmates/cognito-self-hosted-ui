@@ -17,7 +17,7 @@ class LoginProgress
         $this->report('cognito', 'Checking your RSL single sign-on account.', 12);
     }
 
-    public function report(string $stage, string $message, int $percent): void
+    public function report(string $stage, string $message, int $percent, string $state = 'checking'): void
     {
         if ($this->attempt === null) {
             return;
@@ -25,7 +25,7 @@ class LoginProgress
         if (($this->steps[array_key_last($this->steps)]['stage'] ?? null) === $stage) {
             return;
         }
-        $this->steps[] = ['stage' => $stage, 'message' => $message, 'percent' => $percent];
+        $this->steps[] = ['stage' => $stage, 'message' => $message, 'percent' => $percent, 'state' => $state];
         // Store fixed status messages only. No account identifiers, passwords or tokens.
         Cache::put('portal.login.progress.'.$this->attempt, ['steps' => $this->steps], now()->addMinutes(10));
     }

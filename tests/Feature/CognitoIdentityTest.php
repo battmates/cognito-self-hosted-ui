@@ -44,6 +44,19 @@ class CognitoIdentityTest extends TestCase
         Http::assertSent(fn ($request) => $request['AuthParameters']['USERNAME'] === 'wp_123');
     }
 
+    public function test_completed_migration_signs_in_directly_with_the_new_password(): void
+    {
+        config(['migration.enabled' => true]);
+        $this->mock(LegacyMigrationService::class)->shouldNotReceive('resolve');
+        Http::fake(['*' => Http::response(['AuthenticationResult' => ['IdToken' => $this->token(), 'AccessToken' => 'access', 'ExpiresIn' => 3600]])]);
+
+        $result = app(CognitoIdentityService::class)->loginWithCognito('canonical-user', 'NewPassword123!');
+
+        $this->assertSame('canonical-user', $result['tokens']['refresh_username']);
+        Http::assertSent(fn ($request) => $request['AuthParameters']['PASSWORD'] === 'NewPassword123!');
+        Http::assertSentCount(1);
+    }
+
     public function test_password_auth_validates_token_and_uses_canonical_username_for_refresh(): void
     {
         Http::fake(['*' => Http::response(['AuthenticationResult' => ['IdToken' => $this->token(), 'AccessToken' => 'access', 'RefreshToken' => 'refresh', 'ExpiresIn' => 3600]])]);

@@ -498,3 +498,24 @@ h3 {
 .password-visibility-toggle:hover { color: #3da7c7; background: rgb(61 167 199 / 10%); }
 .password-visibility-toggle:focus-visible { outline: 2px solid #3da7c7; outline-offset: 2px; }
 .password-visibility-toggle svg { width: 22px; height: 22px; }
+
+.login-progress-steps li.is-unavailable { color: #b56f2f; }
+.login-progress-steps .is-unavailable .login-progress-step-marker { color: #b56f2f; background: rgb(181 111 47 / 12%); }
+
+.password-setup-card { max-width: 540px; }
+.password-setup-panel { padding: 32px; text-align: center; }
+.password-setup-panel .login-progress-title { font-size: 26px; }
+.password-setup-panel > .portal-copy { font-size: 14px; line-height: 1.6; }
+.password-setup-form { display: grid; gap: 18px; margin-top: 24px; text-align: left; }
+.password-requirements { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; list-style: none; padding: 0; margin: 0; color: var(--portal-muted); font-size: 12px; }
+.password-requirements li { display: flex; gap: 7px; align-items: center; }
+.password-requirements li.is-met { color: #3da7c7; }
+.password-setup-note { font-size: 12px; line-height: 1.6; }
+.password-setup-submit { background: #3da7c7; color: white; border-radius: 12px; padding: 13px 18px; font-weight: 600; text-align: center; }
+.password-setup-submit:hover { background: #3094b2; }
+.password-setup-submit:disabled { opacity: .55; cursor: not-allowed; }
+.password-setup-cancel { font-size: 13px; text-align: center; cursor: pointer; }
+@media (max-width: 480px) { .password-setup-panel { padding: 28px 22px; } .password-requirements { grid-template-columns: 1fr; } }
+.password-setup-panel .login-progress-icon { width: 56px; height: 56px; margin-bottom: 16px; border-radius: 18px; }
+.password-setup-panel [data-password-match]:empty { display: none; }
+.password-setup-panel .password-setup-form { gap: 14px; margin-top: 20px; }

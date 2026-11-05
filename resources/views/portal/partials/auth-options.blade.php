@@ -221,5 +221,8 @@
         </div>
     </dialog>
     @include('portal.partials.login-progress')
+    <dialog class="portal-dialog login-progress-dialog password-setup-dialog" id="migration-password-dialog" aria-labelledby="migration-password-title" aria-describedby="migration-password-description">
+        @include('portal.partials.migration-password-form')
+    </dialog>
 </section>
 @vite('resources/js/app.js')

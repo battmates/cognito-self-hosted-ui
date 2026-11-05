@@ -158,7 +158,7 @@ class CloudMigrationClientTest extends TestCase
             'https://cloud.example.test/backstage/ssoauthenticate' => Http::response($body, 401, $headers),
         ]);
         $this->expectException(ProviderCredentialsException::class);
-        $this->expectExceptionMessage('We found your account on RSL Cloud. Incorrect credentials.');
+        $this->expectExceptionMessage('Incorrect credentials.');
 
         (new CloudMigrationClient)->authenticate($this->provider(), 'person@example.com', 'password');
     }

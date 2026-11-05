@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Exceptions\MigrationPasswordRequiredException;
 use Aws\CognitoIdentityProvider\CognitoIdentityProviderClient;
 use Aws\Exception\AwsException;
 use Illuminate\Support\Facades\Cache;
@@ -257,6 +258,27 @@ class CognitoDirectory
         return $this->createMigratedUser($identity, $password, 'Legacy password recovery could not be completed. Please contact support.');
     }
 
+    public function migrationPasswordPolicy(): array
+    {
+        try {
+            $key = 'portal.migration.password-policy.'.hash('sha256', config('services.cognito.region').':'.config('services.cognito.user_pool_id'));
+            $policy = Cache::remember($key, 300, fn () => $this->client->describeUserPool([
+                'UserPoolId' => config('services.cognito.user_pool_id'),
+            ])['UserPool']['Policies']['PasswordPolicy'] ?? []);
+        } catch (AwsException $exception) {
+            Log::error('portal.migration.password_policy.unavailable', ['aws_error' => $exception->getAwsErrorCode()]);
+            $policy = [];
+        }
+
+        return [
+            'minimum_length' => max(8, (int) ($policy['MinimumLength'] ?? 8)),
+            'uppercase' => (bool) ($policy['RequireUppercase'] ?? true),
+            'lowercase' => (bool) ($policy['RequireLowercase'] ?? true),
+            'numbers' => (bool) ($policy['RequireNumbers'] ?? true),
+            'symbols' => (bool) ($policy['RequireSymbols'] ?? true),
+        ];
+    }
+
     private function createMigratedUser(array $identity, string $password, string $failureMessage): string
     {
         $generateUsername = (bool) filter_var($identity['username'], FILTER_VALIDATE_EMAIL);
@@ -326,9 +348,11 @@ class CognitoDirectory
         if ($operation === 'AdminSetUserPassword') {
             return new RuntimeException($fallback);
         }
+        if ($exception->getAwsErrorCode() === 'InvalidPasswordException') {
+            return new MigrationPasswordRequiredException;
+        }
 
         return new RuntimeException(match ($exception->getAwsErrorCode()) {
-            'InvalidPasswordException' => 'This password does not meet the single sign-on password requirements. Update it on the original platform, then try again.',
             'AccessDeniedException', 'NotAuthorizedException' => 'The portal’s AWS credentials do not allow account migration. Please contact support.',
             default => $fallback,
         });

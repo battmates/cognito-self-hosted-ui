@@ -26,6 +26,8 @@ Route::middleware(PortalSession::class)->group(function () {
     Route::get('/', [AuthPortalController::class, 'home'])->name('portal.home');
     Route::get('/login', [AuthPortalController::class, 'login'])->name('portal.login');
     Route::post('/login', [AuthPortalController::class, 'storeLogin'])->middleware('throttle:10,1')->name('portal.login.store');
+    Route::get('/login/migration-password', [AuthPortalController::class, 'migrationPassword'])->name('portal.login.migration.password');
+    Route::post('/login/migration-password', [AuthPortalController::class, 'storeMigrationPassword'])->middleware('throttle:6,1')->name('portal.login.migration.password.store');
     Route::get('/login/{provider}', [AuthPortalController::class, 'redirectToSocialProvider'])->name('portal.login.provider');
     Route::get('/auth/callback', [AuthPortalController::class, 'handleSocialCallback'])->name('portal.login.provider.callback');
     Route::get('/register', [AuthPortalController::class, 'register'])->name('portal.register');

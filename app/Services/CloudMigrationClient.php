@@ -37,7 +37,12 @@ class CloudMigrationClient
 
         $data = $response->json();
         if ($response->status() === 401 && is_array($data) && ($data['authenticated'] ?? null) === false) {
-            throw new ProviderCredentialsException('RSL Cloud');
+            if (array_key_exists('user', $data) && $data['user'] === null) {
+                return null;
+            }
+            if (is_array($data['user'] ?? null)) {
+                throw new ProviderCredentialsException('RSL Cloud');
+            }
         }
         $challenge = (string) $response->header('WWW-Authenticate');
         preg_match('/\berror="?(invalid_token|invalid_request|insufficient_scope)\b/', $challenge, $error);

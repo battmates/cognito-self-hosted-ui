@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Exceptions\MigrationPasswordRequiredException;
 use App\Exceptions\ProviderCredentialsException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Cache;
@@ -77,7 +78,7 @@ class LegacyMigrationService
                 }
             }
 
-            return $this->provision($identity, $password);
+            return $this->provisionVerifiedIdentity($identity, $password);
         }
 
         if ($unavailable !== []) {
@@ -92,12 +93,16 @@ class LegacyMigrationService
         throw new RuntimeException('We couldn’t find an account matching those details. Please check your email and password.');
     }
 
-    private function provision(array $identity, string $password): string
+    public function provisionVerifiedIdentity(array $identity, string $password): string
     {
         // Different username/email entry points for the same person share a lock.
         return Cache::lock('portal.migrate.'.hash('sha256', strtolower($identity['email'])), 60)->block(3, function () use ($identity, $password) {
             app(LoginProgress::class)->report('migration', 'Account verified. Setting up your single sign-on access.', 80);
-            $username = $this->directory->provision($identity, $password);
+            try {
+                $username = $this->directory->provision($identity, $password);
+            } catch (MigrationPasswordRequiredException) {
+                throw new MigrationPasswordRequiredException($identity);
+            }
             Log::notice('portal.migration', ['source' => $identity['source'], 'identity_hash' => hash('sha256', $identity['source'].':'.$identity['id']), 'outcome' => 'succeeded']);
 
             return $username;

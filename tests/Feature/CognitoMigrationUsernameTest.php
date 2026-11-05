@@ -140,7 +140,7 @@ class CognitoMigrationUsernameTest extends TestCase
         $directory->provision($this->identity(), 'Password123!');
     }
 
-    public function test_password_policy_failure_uses_requested_message_and_logs_only_safe_diagnostics(): void
+    public function test_password_policy_failure_is_distinct_from_incorrect_credentials_and_logs_only_safe_diagnostics(): void
     {
         Log::spy();
         $client = $this->mock(CognitoIdentityProviderClient::class);
@@ -154,7 +154,7 @@ class CognitoMigrationUsernameTest extends TestCase
             $directory->provision($this->identity(), 'private-password');
             $this->fail('Password policy rejection must stop migration.');
         } catch (RuntimeException $exception) {
-            $this->assertSame('Incorrect password.', $exception->getMessage());
+            $this->assertSame('This password does not meet the single sign-on password requirements. Update it on the original platform, then try again.', $exception->getMessage());
             $this->assertNull($exception->getPrevious());
         }
 

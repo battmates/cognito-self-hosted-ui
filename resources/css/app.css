@@ -498,3 +498,6 @@ h3 {
 .password-visibility-toggle:hover { color: #3da7c7; background: rgb(61 167 199 / 10%); }
 .password-visibility-toggle:focus-visible { outline: 2px solid #3da7c7; outline-offset: 2px; }
 .password-visibility-toggle svg { width: 22px; height: 22px; }
+
+.login-progress-steps li.is-unavailable { color: #b56f2f; }
+.login-progress-steps .is-unavailable .login-progress-step-marker { color: #b56f2f; background: rgb(181 111 47 / 12%); }

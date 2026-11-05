@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Exceptions\ProviderCredentialsException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -26,6 +27,7 @@ class LegacyMigrationService
         // The consumer comes from the broker's validated application journey.
         $order = ($context['consumer'] ?? null) === 'musicteacher' ? ['wordpress', 'cloud'] : ['cloud', 'wordpress'];
         $providers = array_values(array_filter($order, fn ($name) => config('migration.providers.'.$name.'.enabled', false)));
+        $unavailable = [];
         foreach ($providers as $position => $name) {
             $provider = config('migration.providers.'.$name, []);
             $label = $name === 'wordpress' ? 'MusicTeacher' : 'RSL Cloud';
@@ -34,7 +36,32 @@ class LegacyMigrationService
                 ($position === 0 ? 'No matching single sign-on account. ' : '').'Checking '.$label.' for a matching sign-in.',
                 $position === 0 ? 35 : 60,
             );
-            $identity = $this->verify($name, $provider, $identifier, $password);
+            try {
+                $identity = $this->verify($name, $provider, $identifier, $password);
+            } catch (ProviderCredentialsException $exception) {
+                app(LoginProgress::class)->report(
+                    $name.'-credentials-rejected',
+                    $exception->getMessage(),
+                    $position === 0 ? 45 : 70,
+                    'rejected',
+                );
+
+                throw $exception;
+            } catch (RuntimeException) {
+                // Verification failures do not prevent another provider from
+                // verifying the user. Directory checks and provisioning remain
+                // outside this catch so a partial creation is never retried.
+                $unavailable[] = $label;
+                Log::error('portal.migration.provider.skipped', ['source' => $name, 'reason' => 'verification_failed']);
+                app(LoginProgress::class)->report(
+                    $name.'-unavailable',
+                    $label.' is unavailable right now. Skipping this service.',
+                    $position === 0 ? 45 : 70,
+                    'unavailable',
+                );
+
+                continue;
+            }
             if (! $identity) {
                 app(LoginProgress::class)->report(
                     $name.'-no-match',
@@ -53,7 +80,16 @@ class LegacyMigrationService
             return $this->provision($identity, $password);
         }
 
-        throw new RuntimeException('Incorrect email, username, or password.');
+        if ($unavailable !== []) {
+            $services = implode(' and ', $unavailable);
+            $verb = count($unavailable) === 1 ? 'is' : 'are';
+            $message = count($unavailable) === count($providers)
+                ? 'We couldn’t check your account.'
+                : 'We couldn’t find a matching account in the services we could check.';
+            throw new RuntimeException($message.' '.$services.' '.$verb.' temporarily unavailable. Please try again in a little while.');
+        }
+
+        throw new RuntimeException('We couldn’t find an account matching those details. Please check your email and password.');
     }
 
     private function provision(array $identity, string $password): string
@@ -129,10 +165,14 @@ class LegacyMigrationService
             Log::error('portal.legacy.verification.failed', ['source' => 'wordpress', 'reason' => 'connection', 'http_status' => null]);
             throw new RuntimeException('Legacy account verification is unavailable. Please try again later.');
         }
-        if (in_array($response->status(), [401, 404], true)) {
+        $data = $response->json();
+        $code = is_array($data) ? ($data['code'] ?? null) : null;
+        $serviceError = ($provider['driver'] ?? '') === 'wordpress_hmac' && is_string($code)
+            && (str_starts_with($code, 'cognito_migrate_') || $code === 'rest_no_route');
+        if (in_array($response->status(), [401, 404], true) && ! $serviceError) {
             return null;
         }
-        if (! $response->ok()) {
+        if (! $response->ok() || $serviceError) {
             $body = strtolower($response->body());
             if (in_array($response->status(), [403, 429, 503], true)
                 && str_contains($body, 'wordfence') && str_contains($body, 'temporarily locked out')) {
@@ -142,7 +182,6 @@ class LegacyMigrationService
             Log::error('portal.legacy.verification.failed', ['source' => 'wordpress', 'reason' => 'http_error', 'http_status' => $response->status()]);
             throw new RuntimeException('Legacy account verification is unavailable. Please try again later.');
         }
-        $data = $response->json();
         if (! is_array($data)) {
             Log::error('portal.legacy.verification.failed', ['source' => 'wordpress', 'reason' => 'invalid_response', 'http_status' => $response->status()]);
             throw new RuntimeException('Legacy account verification returned an invalid response.');

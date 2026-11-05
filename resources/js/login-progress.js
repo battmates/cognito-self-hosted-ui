@@ -30,11 +30,12 @@ if (form && dialog && typeof dialog.showModal === 'function') {
         message.textContent = current.message;
         list.replaceChildren(...steps.map((step, index) => {
             const item = document.createElement('li');
-            item.className = index === steps.length - 1 ? 'is-current' : 'is-complete';
+            const warning = step.state === 'unavailable' || step.state === 'rejected';
+            item.className = warning ? 'is-unavailable' : index === steps.length - 1 ? 'is-current' : 'is-complete';
             const marker = document.createElement('span');
             marker.className = 'login-progress-step-marker';
             marker.setAttribute('aria-hidden', 'true');
-            marker.textContent = index === steps.length - 1 ? '•' : '✓';
+            marker.textContent = warning ? '!' : index === steps.length - 1 ? '•' : '✓';
             const label = document.createElement('span');
             label.textContent = step.message;
             item.append(marker, label);

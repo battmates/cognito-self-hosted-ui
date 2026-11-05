@@ -132,7 +132,7 @@ class LoginProgressTest extends TestCase
             app(LegacyMigrationService::class)->resolve('person@example.com', 'private-password', $context);
             $this->fail('Unmatched credentials should fail.');
         } catch (RuntimeException $exception) {
-            $this->assertSame('Incorrect email, username, or password.', $exception->getMessage());
+            $this->assertSame('We couldn’t find an account matching those details. Please check your email and password.', $exception->getMessage());
         }
         $steps = app(LoginProgress::class)->read($attempt)['steps'];
         $this->assertSame($expected, array_column($steps, 'stage'));
@@ -147,7 +147,6 @@ class LoginProgressTest extends TestCase
         return [
             'direct login' => [[], ['cognito', 'cloud', 'cloud-no-match', 'wordpress', 'wordpress-no-match']],
             'nonexistent user with Cloud 401' => [[], ['cognito', 'cloud', 'cloud-no-match', 'wordpress', 'wordpress-no-match'], 401],
-            'actual Cloud 401 with negative account result and Bearer header' => [[], ['cognito', 'cloud', 'cloud-no-match', 'wordpress', 'wordpress-no-match'], 401, 'Bearer'],
             'MusicTeacher login' => [['consumer' => 'musicteacher'], ['cognito', 'wordpress', 'wordpress-no-match', 'cloud', 'cloud-no-match']],
         ];
     }

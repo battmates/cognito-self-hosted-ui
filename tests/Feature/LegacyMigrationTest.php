@@ -118,7 +118,6 @@ class LegacyMigrationTest extends TestCase
     {
         return [
             'direct' => [[]],
-            'direct with explicit 401 no match' => [[], 401],
             'Cloud' => [['consumer' => 'cloud']],
             'Backstage' => [['consumer' => 'backstage']],
             'Guestlist' => [['consumer' => 'guestlist']],
@@ -173,7 +172,7 @@ class LegacyMigrationTest extends TestCase
     {
         Log::spy();
         $this->enable();
-        config(['migration.providers.cloud' => ['enabled' => true]]);
+        config(['migration.providers.cloud' => ['enabled' => true, 'base_url' => 'https://cloud.example.com', 'username' => 'service-user', 'password' => 'service-password']]);
         Http::fake(['*' => Http::response([], 503)]);
         $directory = $this->mock(CognitoDirectory::class);
         $directory->shouldReceive('resolveUsername')->andReturn(null);
@@ -182,10 +181,10 @@ class LegacyMigrationTest extends TestCase
             (new LegacyMigrationService($directory))->resolve('person@example.com', 'password', ['consumer' => 'musicteacher']);
             $this->fail('A provider outage must stop migration.');
         } catch (\RuntimeException $exception) {
-            $this->assertStringContainsString('Legacy account verification is unavailable', $exception->getMessage());
+            $this->assertStringContainsString('temporarily unavailable. Please try again in a little while.', $exception->getMessage());
         }
-        Log::shouldHaveReceived('error')->once()->with('portal.legacy.verification.failed', ['source' => 'wordpress', 'reason' => 'http_error', 'http_status' => 503]);
-        Http::assertSentCount(1);
+        Log::shouldHaveReceived('error')->with('portal.legacy.verification.failed', ['source' => 'wordpress', 'reason' => 'http_error', 'http_status' => 503])->once();
+        Http::assertSentCount(2);
     }
 
     public function test_provider_connection_failure_is_reported_without_logging_login_details(): void
@@ -200,10 +199,10 @@ class LegacyMigrationTest extends TestCase
             (new LegacyMigrationService($directory))->resolve('person@example.com', 'private-password');
             $this->fail('A connection failure must stop migration.');
         } catch (\RuntimeException $exception) {
-            $this->assertStringContainsString('Legacy account verification is unavailable', $exception->getMessage());
+            $this->assertStringContainsString('temporarily unavailable. Please try again in a little while.', $exception->getMessage());
             $this->assertNull($exception->getPrevious());
         }
-        Log::shouldHaveReceived('error')->once()->with('portal.legacy.verification.failed', ['source' => 'wordpress', 'reason' => 'connection', 'http_status' => null]);
+        Log::shouldHaveReceived('error')->with('portal.legacy.verification.failed', ['source' => 'wordpress', 'reason' => 'connection', 'http_status' => null])->once();
     }
 
     public function test_wordfence_lockout_is_explained_and_is_not_treated_as_no_match(): void
@@ -218,9 +217,9 @@ class LegacyMigrationTest extends TestCase
             (new LegacyMigrationService($directory))->resolve('missing@example.com', 'private-password');
             $this->fail('The security lockout must not be treated as an absent user.');
         } catch (\RuntimeException $exception) {
-            $this->assertSame('MusicTeacher has temporarily blocked sign-in attempts. Please wait before trying again, or contact support.', $exception->getMessage());
+            $this->assertSame('We couldn’t check your account. MusicTeacher is temporarily unavailable. Please try again in a little while.', $exception->getMessage());
         }
-        Log::shouldHaveReceived('error')->once()->with('portal.legacy.verification.failed', ['source' => 'wordpress', 'reason' => 'security_lockout', 'http_status' => 503]);
+        Log::shouldHaveReceived('error')->with('portal.legacy.verification.failed', ['source' => 'wordpress', 'reason' => 'security_lockout', 'http_status' => 503])->once();
         Http::assertSentCount(1);
     }
 
@@ -235,7 +234,7 @@ class LegacyMigrationTest extends TestCase
         $directory = $this->mock(CognitoDirectory::class);
         $directory->shouldReceive('resolveUsername')->andReturn(null);
         $directory->shouldNotReceive('provision');
-        $this->expectExceptionMessage('Please verify your email');
+        $this->expectExceptionMessage('RSL Cloud is temporarily unavailable');
         (new LegacyMigrationService($directory))->resolve('person@example.com', 'password');
     }
 

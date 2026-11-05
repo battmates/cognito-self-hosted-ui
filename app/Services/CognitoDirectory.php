@@ -328,7 +328,7 @@ class CognitoDirectory
         }
 
         return new RuntimeException(match ($exception->getAwsErrorCode()) {
-            'InvalidPasswordException' => 'Your legacy password does not meet the new account password requirements. Reset it on the original platform, then sign in again.',
+            'InvalidPasswordException' => 'Incorrect password.',
             'AccessDeniedException', 'NotAuthorizedException' => 'The portal’s AWS credentials do not allow account migration. Please contact support.',
             default => $fallback,
         });

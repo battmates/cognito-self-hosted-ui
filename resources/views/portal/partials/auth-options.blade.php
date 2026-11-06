@@ -124,7 +124,7 @@
 
                 <div class="space-y-1">
                     <h2 class="portal-heading text-2xl">Create Account</h2>
-                    <p class="portal-copy text-sm">Register for a new account with your details.</p>
+                    <p class="portal-copy text-sm">Register for a new account with your details. If registering as a parent for a child please enter your details here, you will have the option to create linked child accounts later.</p>
                 </div>
 
                 <div>
@@ -174,9 +174,18 @@
                         <input class="portal-checkbox mt-1 h-4 w-4 rounded text-[#3da7c7] focus:ring-[#3da7c7]" type="checkbox" name="accept_policies" value="1" {{ old('accept_policies') ? 'checked' : '' }}>
                         <span>
                             I agree to the
-                            <button class="font-semibold text-[#3da7c7] transition hover:text-[#2b8ca8]" onclick="document.getElementById('privacy-policy-modal').showModal()" type="button">Privacy Policy</button>
+                            @if (config('sso.privacy_policy_url'))
+                                <a class="font-semibold text-[#3da7c7] transition hover:text-[#2b8ca8]" href="{{ config('sso.privacy_policy_url') }}" target="_blank" rel="noopener noreferrer">Privacy Policy</a>
+                            @else
+                                Privacy Policy
+                            @endif
                             and
-                            <button class="font-semibold text-[#3da7c7] transition hover:text-[#2b8ca8]" onclick="document.getElementById('terms-modal').showModal()" type="button">Terms and Conditions</button>.
+                            @if (config('sso.terms_url'))
+                                <a class="font-semibold text-[#3da7c7] transition hover:text-[#2b8ca8]" href="{{ config('sso.terms_url') }}" target="_blank" rel="noopener noreferrer">Terms and Conditions</a>
+                            @else
+                                Terms and Conditions
+                            @endif
+                            .
                         </span>
                     </label>
                     @if ($activeAuthPanel === 'register')
@@ -191,35 +200,6 @@
         </div>
     </div>
 
-    <dialog class="portal-dialog fixed inset-0 m-auto w-full max-w-2xl rounded-2xl border p-0 shadow-[0_16px_60px_rgba(0,0,0,0.16)] backdrop:bg-[rgba(29,29,27,0.45)]" id="privacy-policy-modal">
-        <div class="portal-dialog-panel space-y-5 p-6 lg:p-8">
-            <div class="flex items-start justify-between gap-4">
-                <h3 class="portal-heading">Privacy Policy</h3>
-                <button class="portal-secondary-button rounded-full border px-3 py-1 text-sm font-semibold transition" onclick="document.getElementById('privacy-policy-modal').close()" type="button">Close</button>
-            </div>
-            <div class="portal-copy space-y-4 text-sm leading-6">
-                <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mauris id ligula sed neque pretium cursus. Integer ac mauris vitae arcu laoreet sodales. Donec vitae nisi velit. Nulla facilisi.</p>
-                <p>Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia curae; Cras ullamcorper felis nec sapien convallis, a mattis nibh commodo. Sed in gravida orci. Nulla facilisi.</p>
-                <p>Curabitur posuere, leo nec finibus suscipit, purus lacus posuere eros, vitae luctus lorem mauris sed est. Pellentesque eleifend purus id elit placerat, non egestas turpis ultricies.</p>
-                <p>Nam et sem non massa commodo malesuada. Duis tristique sollicitudin erat, nec sodales neque facilisis non. Sed malesuada convallis dui, sed interdum turpis tincidunt sit amet.</p>
-            </div>
-        </div>
-    </dialog>
-
-    <dialog class="portal-dialog fixed inset-0 m-auto w-full max-w-2xl rounded-2xl border p-0 shadow-[0_16px_60px_rgba(0,0,0,0.16)] backdrop:bg-[rgba(29,29,27,0.45)]" id="terms-modal">
-        <div class="portal-dialog-panel space-y-5 p-6 lg:p-8">
-            <div class="flex items-start justify-between gap-4">
-                <h3 class="portal-heading">Terms and Conditions</h3>
-                <button class="portal-secondary-button rounded-full border px-3 py-1 text-sm font-semibold transition" onclick="document.getElementById('terms-modal').close()" type="button">Close</button>
-            </div>
-            <div class="portal-copy space-y-4 text-sm leading-6">
-                <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mauris id ligula sed neque pretium cursus. Integer ac mauris vitae arcu laoreet sodales. Donec vitae nisi velit. Nulla facilisi.</p>
-                <p>Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia curae; Cras ullamcorper felis nec sapien convallis, a mattis nibh commodo. Sed in gravida orci. Nulla facilisi.</p>
-                <p>Curabitur posuere, leo nec finibus suscipit, purus lacus posuere eros, vitae luctus lorem mauris sed est. Pellentesque eleifend purus id elit placerat, non egestas turpis ultricies.</p>
-                <p>Nam et sem non massa commodo malesuada. Duis tristique sollicitudin erat, nec sodales neque facilisis non. Sed malesuada convallis dui, sed interdum turpis tincidunt sit amet.</p>
-            </div>
-        </div>
-    </dialog>
     @include('portal.partials.login-progress')
     <dialog class="portal-dialog login-progress-dialog password-setup-dialog" id="migration-password-dialog" aria-labelledby="migration-password-title" aria-describedby="migration-password-description">
         @include('portal.partials.migration-password-form')

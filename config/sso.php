@@ -3,6 +3,8 @@
 $csv = fn ($value) => array_values(array_filter(array_map('trim', explode(',', (string) $value))));
 
 return [
+    'privacy_policy_url' => env('SSO_PRIVACY_POLICY_URL'),
+    'terms_url' => env('SSO_TERMS_URL'),
     'state_ttl_seconds' => (int) env('SSO_STATE_TTL_SECONDS', 900),
     'code_ttl_seconds' => 60,
     'claim_map' => [

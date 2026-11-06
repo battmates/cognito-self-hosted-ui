@@ -124,7 +124,8 @@
 
                 <div class="space-y-1">
                     <h2 class="portal-heading text-2xl">Create Account</h2>
-                    <p class="portal-copy text-sm">Register for a new account with your details. If registering as a parent for a child please enter your details here, you will have the option to create linked child accounts later.</p>
+                    <p class="portal-copy text-sm">Register for a new account with your details.</p>
+                    <p class="portal-copy text-sm">If registering as a parent for a child please enter your details here, you will have the option to create linked child accounts later.</p>
                 </div>
 
                 <div>

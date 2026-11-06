@@ -111,7 +111,7 @@ class AuthorizationBrokerTest extends TestCase
 
     public function test_provider_logo_and_login_complete_the_original_callback(): void
     {
-        $this->get('/login?'.http_build_query($this->params()))->assertOk()->assertSee('images/app-logos/backstage-light.svg')->assertDontSee('Please login or register to continue');
+        $this->get('/login?'.http_build_query($this->params()))->assertOk()->assertSee('images/app-logos/backstage-light.svg')->assertSee('Sign in or register to continue to Backstage');
         $id = session('portal.authorization.request_id');
         $result = ['user' => $this->auth()['auth']['status']['user'], 'tokens' => $this->auth()['auth']['tokens']];
         $this->mock(CognitoIdentityService::class)->shouldReceive('login')->once()->andReturn($result);
@@ -126,7 +126,7 @@ class AuthorizationBrokerTest extends TestCase
             ->assertOk()
             ->assertSee('images/app-logos/rsl-cloud-light.svg')
             ->assertSee('Cloud logo')
-            ->assertDontSee('Please login or register to continue');
+            ->assertSee('Sign in or register to continue to Cloud');
     }
 
     public function test_tabs_keep_separate_application_requests(): void

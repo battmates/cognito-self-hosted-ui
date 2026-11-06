@@ -55,13 +55,18 @@
                     default => null,
                 };
             @endphp
-            @if ($providerLogo)
-                <h1 class="application-logo application-logo--{{ str_replace([' ', '.'], '', strtolower($portalContext['application_name'])) }} portal-provider-logo mx-auto w-full">
-                    <img src="{{ asset('images/app-logos/'.$providerLogo) }}" alt="{{ $portalContext['application_name'] }} logo">
-                </h1>
-            @else
-                <h1 class="portal-heading text-center text-2xl lg:text-3xl">{{ $portalContext['application_name'] }}</h1>
-            @endif
+            <div class="space-y-3">
+                @if ($providerLogo)
+                    <h1 class="application-logo application-logo--{{ str_replace([' ', '.'], '', strtolower($portalContext['application_name'])) }} portal-provider-logo mx-auto w-full">
+                        <img src="{{ asset('images/app-logos/'.$providerLogo) }}" alt="{{ $portalContext['application_name'] }} logo">
+                    </h1>
+                @else
+                    <h1 class="portal-heading text-center text-2xl lg:text-3xl">{{ $portalContext['application_name'] }}</h1>
+                @endif
+                @if ($showsAuthOptions)
+                    <p class="portal-copy text-center text-sm">Sign in or register to continue to {{ $portalContext['application_name'] }}</p>
+                @endif
+            </div>
         @endif
 
         @if (session('portal.notice'))

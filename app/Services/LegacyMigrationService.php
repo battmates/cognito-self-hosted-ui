@@ -27,7 +27,8 @@ class LegacyMigrationService
         }
         // The consumer comes from the broker's validated application journey.
         $order = ($context['consumer'] ?? null) === 'musicteacher' ? ['wordpress', 'cloud'] : ['cloud', 'wordpress'];
-        $providers = array_values(array_filter($order, fn ($name) => config('migration.providers.'.$name.'.enabled', false)));
+        $providers = array_values(array_filter($order, fn ($name) => config('migration.providers.'.$name.'.enabled', false)
+            && ($name !== 'cloud' || filter_var($identifier, FILTER_VALIDATE_EMAIL))));
         $unavailable = [];
         foreach ($providers as $position => $name) {
             $provider = config('migration.providers.'.$name, []);

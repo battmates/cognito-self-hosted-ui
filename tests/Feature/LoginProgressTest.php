@@ -138,7 +138,7 @@ class LoginProgressTest extends TestCase
     }
 
     #[DataProvider('providerOrders')]
-    public function test_real_provider_fallback_reports_only_the_checks_that_run(array $context, array $expected, int $cloudStatus = 200, ?string $cloudChallenge = null): void
+    public function test_real_provider_fallback_reports_only_the_checks_that_run(array $context, array $expected, int $cloudStatus = 200, ?string $cloudChallenge = null, string $identifier = 'person@example.com'): void
     {
         config(['migration.enabled' => true, 'sso.management_writes_enabled' => true,
             'migration.providers.wordpress' => ['enabled' => true, 'driver' => 'json_bearer', 'endpoint' => 'https://wordpress.example.test/verify', 'token' => 'private-service-token'],
@@ -153,16 +153,16 @@ class LoginProgressTest extends TestCase
         $attempt = (string) Str::uuid();
         app(LoginProgress::class)->begin($attempt);
         try {
-            app(LegacyMigrationService::class)->resolve('person@example.com', 'private-password', $context);
+            app(LegacyMigrationService::class)->resolve($identifier, 'private-password', $context);
             $this->fail('Unmatched credentials should fail.');
         } catch (RuntimeException $exception) {
             $this->assertSame('We couldn’t find an account matching those details. Please check your email and password.', $exception->getMessage());
         }
         $steps = app(LoginProgress::class)->read($attempt)['steps'];
         $this->assertSame($expected, array_column($steps, 'stage'));
-        $this->assertSame([12, 35, 45, 60, 70], array_column($steps, 'percent'));
+        $this->assertSame(array_slice([12, 35, 45, 60, 70], 0, count($expected)), array_column($steps, 'percent'));
         $requests = Http::recorded()->map(fn ($pair) => $pair[0]->method())->all();
-        $this->assertSame(($context['consumer'] ?? null) === 'musicteacher' ? ['POST', 'GET', 'POST'] : ['GET', 'POST', 'POST'], $requests);
+        $this->assertSame(! filter_var($identifier, FILTER_VALIDATE_EMAIL) ? ['POST'] : (($context['consumer'] ?? null) === 'musicteacher' ? ['POST', 'GET', 'POST'] : ['GET', 'POST', 'POST']), $requests);
         $this->assertStringNotContainsString('private-', json_encode($steps));
     }
 
@@ -172,6 +172,8 @@ class LoginProgressTest extends TestCase
             'direct login' => [[], ['cognito', 'cloud', 'cloud-no-match', 'wordpress', 'wordpress-no-match']],
             'nonexistent user with Cloud 401' => [[], ['cognito', 'cloud', 'cloud-no-match', 'wordpress', 'wordpress-no-match'], 401],
             'MusicTeacher login' => [['consumer' => 'musicteacher'], ['cognito', 'wordpress', 'wordpress-no-match', 'cloud', 'cloud-no-match']],
+            'username login skips Cloud silently' => [[], ['cognito', 'wordpress', 'wordpress-no-match'], 200, null, 'legacy-user'],
+            'MusicTeacher username skips Cloud silently' => [['consumer' => 'musicteacher'], ['cognito', 'wordpress', 'wordpress-no-match'], 200, null, 'legacy-user'],
         ];
     }
 }

@@ -31,6 +31,14 @@ class CloudMigrationClientTest extends TestCase
         ]);
     }
 
+    public function test_username_skips_token_acquisition_and_cloud_verification(): void
+    {
+        Http::fake();
+
+        $this->assertNull((new CloudMigrationClient)->authenticate($this->provider(), 'legacy-username', 'password'));
+        Http::assertNothingSent();
+    }
+
     public function test_token_is_reused_across_users_and_client_instances_until_expiry(): void
     {
         $this->freezeTime();

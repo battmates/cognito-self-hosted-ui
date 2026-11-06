@@ -18,6 +18,10 @@ class CloudMigrationClient
 {
     public function authenticate(array $provider, string $identifier, string $password): ?array
     {
+        if (! filter_var($identifier, FILTER_VALIDATE_EMAIL)) {
+            return null;
+        }
+
         $baseUrl = rtrim((string) ($provider['base_url'] ?? ''), '/');
         $username = $provider['username'] ?? '';
         $servicePassword = $provider['password'] ?? '';

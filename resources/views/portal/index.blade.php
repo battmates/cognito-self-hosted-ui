@@ -64,7 +64,7 @@
                     <h1 class="portal-heading text-center text-2xl lg:text-3xl">{{ $portalContext['application_name'] }}</h1>
                 @endif
                 @if ($showsAuthOptions)
-                    <p class="portal-copy text-center text-sm">Sign in or register to continue to {{ $portalContext['application_name'] }}</p>
+                    <p class="portal-copy text-center" style="font-weight: 600; font-size: 1em;">Sign in or register to continue to {{ $portalContext['application_name'] }}</p>
                 @endif
             </div>
         @endif

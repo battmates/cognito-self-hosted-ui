@@ -55,7 +55,7 @@
 
                 <div class="space-y-1">
                     <h2 class="portal-heading text-2xl">Sign In</h2>
-                    <p class="portal-copy text-sm">Access your account with your email or a connected provider.</p>
+                    <p class="portal-copy text-sm">Access your account with your username, email or a connected provider.</p>
                 </div>
 
                 <div>

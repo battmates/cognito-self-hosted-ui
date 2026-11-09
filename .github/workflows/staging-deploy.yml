@@ -1,0 +1,230 @@
+name: Deploy staging
+
+on:
+  push:
+    branches: [staging]
+
+concurrency:
+  group: cloudways-staging-deployment
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Upload and deploy staging
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    environment: staging
+
+    steps:
+      - name: Check out staging
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - id: changes
+        name: Check Composer changes
+        shell: bash
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          AFTER_SHA: ${{ github.sha }}
+        run: |
+          if git cat-file -e "$BEFORE_SHA^{commit}" 2>/dev/null &&
+             git diff --quiet "$BEFORE_SHA" "$AFTER_SHA" -- composer.json composer.lock; then
+            echo "composer=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "composer=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Build frontend assets
+        run: |
+          npm ci
+          npm run build
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, pdo_mysql, pdo_sqlite
+          tools: composer:v2
+          coverage: none
+
+      - name: Install PHP dependencies and test
+        run: |
+          composer install --prefer-dist --no-interaction --no-progress
+          cp .env.example .env
+          php artisan test
+        env:
+          APP_KEY: base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+
+      - name: Validate staging configuration
+        shell: bash
+        env:
+          APP_ROOT: ${{ secrets.CLOUDWAYS_APP_PATH_STAGING }}
+          DEPLOY_HOST: ${{ secrets.CLOUDWAYS_HOST_STAGING }}
+          DEPLOY_USER: ${{ secrets.CLOUDWAYS_USER_STAGING }}
+          DEPLOY_KEY: ${{ secrets.CLOUDWAYS_KEY_STAGING }}
+        run: |
+          missing=false
+          for entry in APP_ROOT:CLOUDWAYS_APP_PATH_STAGING DEPLOY_HOST:CLOUDWAYS_HOST_STAGING DEPLOY_USER:CLOUDWAYS_USER_STAGING DEPLOY_KEY:CLOUDWAYS_KEY_STAGING; do
+            variable="${entry%%:*}"
+            secret_name="${entry#*:}"
+            if [[ -z "${!variable}" ]]; then
+              echo "::error::Missing $secret_name. Add it under Settings > Environments > staging > Environment secrets."
+              missing=true
+            fi
+          done
+          if [[ "$missing" == true ]]; then
+            exit 1
+          fi
+          if [[ ! "$APP_ROOT" =~ ^/([a-zA-Z0-9_.-]+/)+public_html$ ]] ||
+             [[ "$APP_ROOT" == */../* || "$APP_ROOT" == */./* ]]; then
+            echo "::error::CLOUDWAYS_APP_PATH_STAGING must be the absolute path to public_html, without quotes, surrounding whitespace or a trailing slash. Copy the output of pwd from that directory."
+            exit 1
+          fi
+
+      - name: Check Cloudways application before upload
+        uses: appleboy/ssh-action@v1.2.2
+        env:
+          APP_ROOT: ${{ secrets.CLOUDWAYS_APP_PATH_STAGING }}
+        with:
+          host: ${{ secrets.CLOUDWAYS_HOST_STAGING }}
+          username: ${{ secrets.CLOUDWAYS_USER_STAGING }}
+          port: ${{ secrets.CLOUDWAYS_PORT_STAGING || '22' }}
+          key: ${{ secrets.CLOUDWAYS_KEY_STAGING }}
+          envs: APP_ROOT
+          script: |
+            set -eu
+            test -d "$APP_ROOT"
+            test -f "$APP_ROOT/index.php"
+            test -f "$APP_ROOT/.htaccess"
+            WEB_ROOT="$APP_ROOT"
+            APP_ROOT="$(dirname "$APP_ROOT")/private_html/app"
+            test -d "$APP_ROOT"
+            cd "$APP_ROOT"
+            test -f .env
+            command -v php >/dev/null
+            command -v composer >/dev/null
+            command -v rsync >/dev/null
+            mkdir -p public/build/assets "$WEB_ROOT/build/assets"
+
+      - name: Upload private build assets
+        uses: burnett01/rsync-deployments@v8
+        with:
+          switches: >-
+            -az
+          path: public/build/assets/
+          remote_path: ${{ secrets.CLOUDWAYS_APP_PATH_STAGING }}/../private_html/app/public/build/assets/
+          remote_host: ${{ secrets.CLOUDWAYS_HOST_STAGING }}
+          remote_port: ${{ secrets.CLOUDWAYS_PORT_STAGING || '22' }}
+          remote_user: ${{ secrets.CLOUDWAYS_USER_STAGING }}
+          remote_key: ${{ secrets.CLOUDWAYS_KEY_STAGING }}
+
+      - name: Upload public build assets
+        uses: burnett01/rsync-deployments@v8
+        with:
+          switches: >-
+            -az
+          path: public/build/assets/
+          remote_path: ${{ secrets.CLOUDWAYS_APP_PATH_STAGING }}/build/assets/
+          remote_host: ${{ secrets.CLOUDWAYS_HOST_STAGING }}
+          remote_port: ${{ secrets.CLOUDWAYS_PORT_STAGING || '22' }}
+          remote_user: ${{ secrets.CLOUDWAYS_USER_STAGING }}
+          remote_key: ${{ secrets.CLOUDWAYS_KEY_STAGING }}
+
+      - name: Upload private Laravel application
+        uses: burnett01/rsync-deployments@v8
+        with:
+          switches: >-
+            -az --delete
+            --exclude=.git --exclude=.github --exclude=.env --exclude=.env.*
+            --exclude=storage --exclude=vendor --exclude=node_modules --exclude=bootstrap/cache
+            --exclude=.cloudways --exclude=.vscode --exclude=.idea --exclude=.DS_Store
+            --exclude=auth.json --exclude=*.sqlite --exclude=*.sqlite-*
+            --exclude=/public/storage --exclude=/public/hot --exclude=/public/build
+          path: ./
+          remote_path: ${{ secrets.CLOUDWAYS_APP_PATH_STAGING }}/../private_html/app/
+          remote_host: ${{ secrets.CLOUDWAYS_HOST_STAGING }}
+          remote_port: ${{ secrets.CLOUDWAYS_PORT_STAGING || '22' }}
+          remote_user: ${{ secrets.CLOUDWAYS_USER_STAGING }}
+          remote_key: ${{ secrets.CLOUDWAYS_KEY_STAGING }}
+
+      - name: Upload public web files
+        uses: burnett01/rsync-deployments@v8
+        with:
+          switches: >-
+            -az --exclude=/index.php --exclude=/.htaccess
+            --exclude=/build --exclude=/storage --exclude=/hot --exclude=.DS_Store
+          path: public/
+          remote_path: ${{ secrets.CLOUDWAYS_APP_PATH_STAGING }}/
+          remote_host: ${{ secrets.CLOUDWAYS_HOST_STAGING }}
+          remote_port: ${{ secrets.CLOUDWAYS_PORT_STAGING || '22' }}
+          remote_user: ${{ secrets.CLOUDWAYS_USER_STAGING }}
+          remote_key: ${{ secrets.CLOUDWAYS_KEY_STAGING }}
+
+      - name: Install dependencies and migrate
+        uses: appleboy/ssh-action@v1.2.2
+        env:
+          APP_ROOT: ${{ secrets.CLOUDWAYS_APP_PATH_STAGING }}
+          COMPOSER_CHANGED: ${{ steps.changes.outputs.composer }}
+        with:
+          host: ${{ secrets.CLOUDWAYS_HOST_STAGING }}
+          username: ${{ secrets.CLOUDWAYS_USER_STAGING }}
+          port: ${{ secrets.CLOUDWAYS_PORT_STAGING || '22' }}
+          key: ${{ secrets.CLOUDWAYS_KEY_STAGING }}
+          envs: APP_ROOT,COMPOSER_CHANGED
+          command_timeout: 30m
+          script: |
+            set -eu
+            if [ -z "$APP_ROOT" ] || [ ! -d "$APP_ROOT" ]; then
+              echo "CLOUDWAYS_APP_PATH_STAGING is empty or does not exist."
+              exit 1
+            fi
+            APP_ROOT="$(dirname "$APP_ROOT")/private_html/app"
+            test -d "$APP_ROOT"
+            cd "$APP_ROOT"
+            mkdir -p bootstrap/cache storage/framework/cache/data storage/framework/sessions storage/framework/views storage/logs
+            test -w storage
+            test -w bootstrap/cache
+
+            if [ "$COMPOSER_CHANGED" = "true" ] || [ ! -f vendor/autoload.php ]; then
+              composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
+            fi
+
+            php artisan migrate --force
+            php artisan view:clear
+            php artisan optimize:clear
+
+      - name: Publish private build manifest
+        uses: burnett01/rsync-deployments@v8
+        with:
+          switches: >-
+            -az
+          path: public/build/manifest.json
+          remote_path: ${{ secrets.CLOUDWAYS_APP_PATH_STAGING }}/../private_html/app/public/build/
+          remote_host: ${{ secrets.CLOUDWAYS_HOST_STAGING }}
+          remote_port: ${{ secrets.CLOUDWAYS_PORT_STAGING || '22' }}
+          remote_user: ${{ secrets.CLOUDWAYS_USER_STAGING }}
+          remote_key: ${{ secrets.CLOUDWAYS_KEY_STAGING }}
+
+      - name: Publish public build manifest
+        uses: burnett01/rsync-deployments@v8
+        with:
+          switches: >-
+            -az
+          path: public/build/manifest.json
+          remote_path: ${{ secrets.CLOUDWAYS_APP_PATH_STAGING }}/build/
+          remote_host: ${{ secrets.CLOUDWAYS_HOST_STAGING }}
+          remote_port: ${{ secrets.CLOUDWAYS_PORT_STAGING || '22' }}
+          remote_user: ${{ secrets.CLOUDWAYS_USER_STAGING }}
+          remote_key: ${{ secrets.CLOUDWAYS_KEY_STAGING }}
+

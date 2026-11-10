@@ -3,7 +3,7 @@
     @csrf
                             @include('portal.partials.context-fields', ['portalContext' => $portalContext])
     <h1 class="portal-heading text-2xl">{{ $challenge['name'] === 'NEW_PASSWORD_REQUIRED' ? 'Choose your password' : 'Verify your sign-in' }}</h1>
-    @if ($errors->any())<p role="alert" class="text-[#b56f2f]">{{ $errors->first() }}</p>@endif
+    @if ($errors->any())<div role="alert" class="text-[#b56f2f]"><p>{{ $errors->first() }}</p>@include('portal.partials.help-support')</div>@endif
     @if ($challenge['name'] === 'NEW_PASSWORD_REQUIRED')
         @foreach ($challenge['required_attributes'] ?? [] as $attribute)
             <label class="portal-label block">{{ ucwords(str_replace('_', ' ', $attribute)) }}

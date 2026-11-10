@@ -71,6 +71,13 @@
                 @yield('content')
             </div>
 
+            @if (config('sso.help_url'))
+                <a class="portal-help-button" href="{{ config('sso.help_url') }}" target="_blank" rel="noopener noreferrer" aria-label="Open help guide (opens in a new tab)">
+                    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 5 .5c0 1.5-2.5 2-2.5 3.5M12 16h.01"/></svg>
+                    <span>Help</span>
+                </a>
+            @endif
+
             <footer class="flex justify-center px-6 pb-8 pt-4 lg:pb-10">
                 <div aria-label="Next Gen Backstage" class="portal-footer-logo h-auto w-[132px] opacity-90">
                     {!! $footerLogo !!}

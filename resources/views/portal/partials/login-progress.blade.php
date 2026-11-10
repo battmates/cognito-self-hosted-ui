@@ -7,6 +7,7 @@
         <p class="login-progress-eyebrow">ONE ACCOUNT. ALL YOUR PLATFORMS.</p>
         <h2 class="portal-heading login-progress-title" id="login-progress-title" tabindex="-1">Signing you in</h2>
         <p class="portal-copy login-progress-message" id="login-progress-message" role="status" aria-live="polite">Connecting securely to single sign-on.</p>
+        @include('portal.partials.help-support', ['helpOnError' => true])
         <div class="login-progress-track" role="progressbar" aria-label="Sign-in steps" aria-valuemin="0" aria-valuemax="100" aria-valuenow="4" aria-valuetext="Connecting securely">
             <div class="login-progress-fill" style="width: 4%"></div>
         </div>

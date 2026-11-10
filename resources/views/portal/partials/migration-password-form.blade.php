@@ -11,7 +11,10 @@
         @csrf
         <input type="hidden" name="challenge" value="{{ $setup['challenge_id'] ?? '' }}">
         <input type="hidden" name="login_progress" value="{{ $loginAttempt ?? '' }}">
-        <p class="login-form-error rounded-xl border p-4 text-sm {{ $errors->any() ? '' : 'hidden' }}" role="alert" data-password-setup-error>{{ $errors->first() }}</p>
+        <div class="login-form-error rounded-xl border p-4 text-sm {{ $errors->any() ? '' : 'hidden' }}" role="alert" data-password-setup-error>
+            <p data-password-setup-error-message>{{ $errors->first() }}</p>
+            @include('portal.partials.help-support')
+        </div>
         @foreach (['password' => ['migration-new-password', 'New password'], 'password_confirmation' => ['migration-password-confirmation', 'Confirm new password']] as $name => [$id, $label])
             <div>
                 <label class="portal-label mb-2 block text-sm font-semibold" for="{{ $id }}">{{ $label }}</label>

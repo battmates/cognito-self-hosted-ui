@@ -51,7 +51,10 @@
                 @include('portal.partials.context-fields', ['portalContext' => $portalContext])
                 <input type="hidden" name="auth_panel" value="login">
                 <input type="hidden" name="login_progress" value="{{ $loginAttempt }}">
-                <p class="login-form-error hidden rounded-xl border p-4 text-sm" role="alert" data-login-error></p>
+                <div class="login-form-error hidden rounded-xl border p-4 text-sm" role="alert" data-login-error>
+                    <p data-login-error-message></p>
+                    @include('portal.partials.help-support')
+                </div>
 
                 <div class="space-y-1">
                     <h2 class="portal-heading text-2xl">Sign In</h2>
@@ -62,7 +65,7 @@
                     <label class="portal-label mb-2 block text-sm font-semibold uppercase tracking-[0.14em]" for="login-email">Email or username</label>
                     <input class="portal-input w-full rounded-xl border px-4 py-3 text-base outline-none focus:border-[#3da7c7]" id="login-email" type="text" name="email" required maxlength="128" value="{{ $defaultEmail }}" autocomplete="username">
                     @if ($activeAuthPanel === 'login')
-                        @error('email')<p class="mt-2 text-sm text-[#b56f2f]">{{ $message }}</p>@enderror
+                        @error('email')<div class="mt-2 text-sm text-[#b56f2f]"><p>{{ $message }}</p>@include('portal.partials.help-support')</div>@enderror
                     @endif
                 </div>
 
@@ -76,7 +79,7 @@
                         </button>
                     </div>
                     @if ($activeAuthPanel === 'login')
-                        @error('password')<p class="mt-2 text-sm text-[#b56f2f]">{{ $message }}</p>@enderror
+                        @error('password')<div class="mt-2 text-sm text-[#b56f2f]"><p>{{ $message }}</p>@include('portal.partials.help-support')</div>@enderror
                     @endif
                 </div>
 

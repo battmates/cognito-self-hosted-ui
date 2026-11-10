@@ -78,6 +78,7 @@
         @if (session('portal.error'))
             <div class="rounded-xl border border-[#edd7b5] bg-[#fff7e8] px-5 py-4 text-sm text-[#8a6130]">
                 {{ session('portal.error') }}
+                @include('portal.partials.help-support')
             </div>
         @endif
 

@@ -447,6 +447,30 @@ h3 {
 :root[data-theme='dark'] .portal-row-menu-item--danger {
     color: #ffbbc4;
 }
+.portal-help-button {
+    position: fixed;
+    right: calc(1rem + env(safe-area-inset-right, 0px));
+    bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+    z-index: 50;
+    display: inline-flex;
+    align-items: center;
+    gap: .5rem;
+    padding: .75rem 1rem;
+    border-radius: 999px;
+    background: #3da7c7;
+    color: #fff;
+    font-size: .875rem;
+    font-weight: 600;
+    box-shadow: 0 4px 16px rgb(0 0 0 / 18%);
+    text-decoration: none;
+}
+.portal-help-button:hover { background: #2b8ca8; }
+.portal-help-button svg { width: 22px; height: 22px; }
+.portal-help-button:focus-visible,
+.portal-help-link:focus-visible { outline: 3px solid currentColor; outline-offset: 4px; }
+.portal-help-support { margin-top: .75rem; font-size: .875rem; line-height: 1.6; }
+.portal-help-link { color: #3da7c7; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+
 .login-progress-dialog {
     width: min(520px, calc(100% - 2rem));
     margin: auto;

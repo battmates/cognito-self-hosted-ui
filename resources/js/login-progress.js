@@ -11,6 +11,8 @@ if (form && dialog && typeof dialog.showModal === 'function') {
     const reassurance = dialog.querySelector('.login-progress-reassurance');
     const dismiss = dialog.querySelector('.login-progress-dismiss');
     const error = form.querySelector('[data-login-error]');
+    const errorMessage = error.querySelector('[data-login-error-message]');
+    const help = dialog.querySelector('[data-login-help]');
     const passwordDialog = document.getElementById('migration-password-dialog');
     const passwordForm = passwordDialog.querySelector('[data-password-setup]');
     const newPassword = passwordForm.elements.password;
@@ -80,6 +82,7 @@ if (form && dialog && typeof dialog.showModal === 'function') {
         stageCount = 0;
         percent = creating ? 75 : 4;
         error.classList.add('hidden');
+        if (help) help.hidden = true;
         submit.disabled = true;
         submit.textContent = 'Signing in…';
         form.setAttribute('aria-busy', 'true');
@@ -113,7 +116,8 @@ if (form && dialog && typeof dialog.showModal === 'function') {
         dialog.querySelector('.login-progress-result').textContent = '!';
         dialog.querySelector('.login-progress-result').hidden = false;
         dismiss.hidden = false;
-        error.textContent = text;
+        errorMessage.textContent = text;
+        if (help) help.hidden = false;
         error.classList.remove('hidden');
         dismiss.focus();
     };
@@ -167,7 +171,7 @@ if (form && dialog && typeof dialog.showModal === 'function') {
             item.append(marker, text);
             return item;
         }));
-        passwordError.textContent = detail;
+        passwordError.querySelector('[data-password-setup-error-message]').textContent = detail;
         passwordError.classList.toggle('hidden', !detail);
         passwordSubmit.textContent = 'Create password and continue';
         checkNewPassword();

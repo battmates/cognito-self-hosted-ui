@@ -533,7 +533,7 @@ class AuthPortalController extends Controller
                 'user' => null,
             ]),
             'socialProviders' => $this->identity->socialProviders(),
-            'applications' => Arr::only(config('sso.consumers', []), ['cloud', 'backstage', 'guestlist', 'musicteacher']),
+            'applications' => Arr::only(config('sso.consumers', []), ['cloud', 'backstage', 'guestlist', 'musicteacher', 'greenroom']),
         ]);
     }
 

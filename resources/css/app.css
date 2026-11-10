@@ -300,6 +300,10 @@ body {
     content: url('/images/app-logos/backstage-dark.svg');
 }
 
+:root[data-theme='dark'] .application-logo--greenroom img {
+    content: url('/images/app-logos/greenroom-dark.svg');
+}
+
 .portal-provider-logo {
     width: 100%;
     justify-content: center;

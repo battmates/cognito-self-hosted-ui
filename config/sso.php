@@ -30,6 +30,13 @@ return [
             'logout_urls' => $csv(env('SSO_GUESTLIST_LOGOUT_URLS', 'https://staging.guestlist.rockschool.io/logout')),
         ],
         'musicteacher' => ['label' => 'MusicTeacher', 'description' => 'A teacher-first registry designed to help students make confident choices and help teachers stand out with clear trust signals.', 'base_url' => env('SSO_MUSICTEACHER_URL'), 'callback_urls' => $csv(env('SSO_MUSICTEACHER_CALLBACK_URLS')), 'logout_urls' => $csv(env('SSO_MUSICTEACHER_LOGOUT_URLS'))],
+        'greenroom' => [
+            'label' => 'Greenroom',
+            'description' => 'Staff and examiner training for RSL, Rockschool and partner organisations.',
+            'base_url' => env('SSO_GREENROOM_URL'),
+            'callback_urls' => $csv(env('SSO_GREENROOM_CALLBACK_URLS')),
+            'logout_urls' => $csv(env('SSO_GREENROOM_LOGOUT_URLS')),
+        ],
         'spotlight' => ['label' => 'Spotlight', 'base_url' => env('SSO_SPOTLIGHT_URL'), 'callback_urls' => $csv(env('SSO_SPOTLIGHT_CALLBACK_URLS')), 'logout_urls' => $csv(env('SSO_SPOTLIGHT_LOGOUT_URLS'))],
     ],
     'management_roles' => ['admin', 'administrator', 'ops_manager'],

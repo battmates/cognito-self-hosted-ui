@@ -424,6 +424,7 @@ class CognitoIdentityService
         return match (true) {
             str_contains($errorType, 'NotAuthorizedException') => 'Incorrect email, username, or password.',
             str_contains($errorType, 'UsernameExistsException') => 'An account with this email already exists.',
+            str_contains($errorType, 'AliasExistsException') => 'This email address is already verified on another account. Please sign in with your existing account or contact support.',
             str_contains($errorType, 'UserNotConfirmedException') => 'This account is not confirmed yet.',
             str_contains($errorType, 'CodeMismatchException') => 'The confirmation code is invalid.',
             str_contains($errorType, 'ExpiredCodeException') => 'The confirmation code has expired.',

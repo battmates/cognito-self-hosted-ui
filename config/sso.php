@@ -3,6 +3,7 @@
 $csv = fn ($value) => array_values(array_filter(array_map('trim', explode(',', (string) $value))));
 
 return [
+    'staging' => (bool) env('SSO_STAGING', false),
     'help_url' => env('SSO_HELP_URL'),
     'privacy_policy_url' => env('SSO_PRIVACY_POLICY_URL'),
     'terms_url' => env('SSO_TERMS_URL'),

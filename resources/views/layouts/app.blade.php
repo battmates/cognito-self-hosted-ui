@@ -78,6 +78,10 @@
                 </a>
             @endif
 
+            @if (config('sso.staging'))
+                <div class="portal-staging-badge" aria-label="Staging environment">staging</div>
+            @endif
+
             <footer class="flex justify-center px-6 pb-8 pt-4 lg:pb-10">
                 <div aria-label="Next Gen Backstage" class="portal-footer-logo h-auto w-[132px] opacity-90">
                     {!! $footerLogo !!}

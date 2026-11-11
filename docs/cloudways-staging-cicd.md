@@ -1,5 +1,11 @@
 # Cloudways staging deployment
 
+Active development uses `https://sso.rslgroup.io` (Cloudways application `6770499`, origin `phpstack-1454445-6770499.cloudwaysapps.com`). The staging SSH user is `sso-staging@46.101.76.53`; its private application root is `/home/1454445.cloudwaysapps.com/fmfhdwpaxm/private_html/app` and its public root is `/home/1454445.cloudwaysapps.com/fmfhdwpaxm/public_html`. Never deploy staging changes to the live `auth.rslgroup.io` application without an explicit request.
+
+Use pool `eu-west-2_0UluqBtXH` and client `ncqe4ihumsn7hh98ju5gtmlp8` in `eu-west-2`. Keep credentials in each server's environment/settings, never in this document. The portal's upstream `COGNITO_DOMAIN` is `eu-west-20uluqbtxh.auth.eu-west-2.amazoncognito.com`; downstream staging sites use `sso.rslgroup.io` for authorization, code exchange and logout. Set `SSO_STAGING=true` to show the fixed bottom-left staging badge; it defaults to false.
+
+Staging consumers: Cloud at `rslawards-staging2.azurewebsites.net`, Backstage at `staging.rockschool.io`, Guestlist at `staging.guestlist.rockschool.io`, MusicTeacher at `woocommerce-1671671-6675507.cloudwaysapps.com`, and Greenroom at `staging.greenroom.rslgroup.io`. Their callback/logout allowlists must contain only the intended staging destinations.
+
 Pushes and merges into `staging` trigger [Deploy staging](../.github/workflows/staging-deploy.yml). It uses the GitHub `staging` environment and a separate deployment concurrency group. `main` continues to deploy live.
 
 ## Configure GitHub and Cloudways

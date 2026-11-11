@@ -30,6 +30,17 @@ class CognitoIdentityTest extends TestCase
         return JWT::encode(array_merge(['iss' => 'https://cognito-idp.eu-west-2.amazonaws.com/test-pool', 'aud' => 'test-client', 'token_use' => 'id', 'sub' => 'subject-1', 'cognito:username' => 'canonical-user', 'email' => 'test@example.com', 'custom:user_role' => 'administrator', 'iat' => time(), 'exp' => time() + 3600], $overrides), $this->privateKey, 'RS256', 'test-key');
     }
 
+    public function test_confirmation_explains_an_email_already_verified_on_another_account(): void
+    {
+        Http::fake(['*' => Http::response(['__type' => 'AliasExistsException'], 400)]);
+
+        $this->post('/register/confirm', ['username' => 'new-user', 'email' => 'existing@example.com', 'code' => '123456', 'portal_request' => 'direct'])
+            ->assertSessionHasErrors(['code' => 'This email address is already verified on another account. Please sign in with your existing account or contact support.']);
+
+        Http::assertSentCount(1);
+        Http::assertSent(fn ($request) => $request->header('X-Amz-Target')[0] === 'AWSCognitoIdentityProviderService.ConfirmSignUp' && ! isset($request['ForceAliasCreation']));
+    }
+
     public function test_login_passes_application_context_to_legacy_provider_selection(): void
     {
         config(['migration.enabled' => true]);

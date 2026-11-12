@@ -43,6 +43,59 @@ class AuthorizationBrokerTest extends TestCase
         return $this->post('/oauth2/token', array_merge(['grant_type' => 'authorization_code', 'client_id' => 'shared-client', 'client_secret' => 'client-secret', 'redirect_uri' => 'https://staging.rockschool.io/cognito-login', 'code' => $code], $extra));
     }
 
+    private function allowOtherPlatforms(): void
+    {
+        config(['sso.consumers.other_platforms' => [
+            'callback_urls' => ['https://preprod.rslawards.com/cognito-login', 'https://shopfront.rockschool.io/cognito-login'],
+            'logout_urls' => ['https://preprod.rslawards.com/logout', 'https://shopfront.rockschool.io/logout'],
+        ]]);
+    }
+
+    public static function otherPlatforms(): array
+    {
+        return [['https://preprod.rslawards.com'], ['https://shopfront.rockschool.io']];
+    }
+
+    #[DataProvider('otherPlatforms')]
+    public function test_other_platform_can_exchange_a_callback_bound_single_use_code_without_a_card(string $baseUrl): void
+    {
+        $this->allowOtherPlatforms();
+        $callback = $baseUrl.'/cognito-login';
+        $this->get('/login?'.http_build_query($this->params(['redirect_uri' => $callback])))
+            ->assertOk()->assertSee('Sign In')->assertDontSee('Sign in or register to continue to');
+        $this->assertSame('other_platforms', session('portal.authorization.consumer'));
+
+        $code = $this->issue(['redirect_uri' => $callback]);
+        $this->exchange($code)->assertStatus(400)->assertJsonPath('error', 'invalid_grant');
+        $this->exchange($code, ['redirect_uri' => $callback])->assertOk()->assertJsonPath('id_token', 'signed-cognito-id-token');
+        $this->exchange($code, ['redirect_uri' => $callback])->assertStatus(400);
+
+        $this->withSession($this->auth())->get('/')->assertOk()
+            ->assertViewHas('applications', fn ($apps) => ! array_key_exists('other_platforms', $apps))
+            ->assertDontSee($baseUrl);
+    }
+
+    #[DataProvider('otherPlatforms')]
+    public function test_other_platform_signout_is_allowed_but_near_matches_and_wrong_url_types_are_rejected(string $baseUrl): void
+    {
+        $this->allowOtherPlatforms();
+        $this->mock(CognitoIdentityService::class)->shouldReceive('logout')->once();
+        foreach ([$baseUrl.'/cognito-login/', $baseUrl.'/cognito-login?extra=1', $baseUrl.'/logout'] as $callback) {
+            $this->get('/login?'.http_build_query($this->params(['redirect_uri' => $callback])))->assertStatus(400);
+        }
+        $this->get('/logout?'.http_build_query(['client_id' => 'shared-client', 'logout_uri' => $baseUrl.'/cognito-login']))->assertStatus(400);
+        $this->get('/logout?'.http_build_query(['client_id' => 'shared-client', 'logout_uri' => $baseUrl.'/logout/']))->assertStatus(400);
+        $this->withSession($this->auth())->get('/logout?'.http_build_query(['client_id' => 'shared-client', 'logout_uri' => $baseUrl.'/logout']))
+            ->assertRedirect($baseUrl.'/logout')->assertSessionMissing('auth.status');
+    }
+
+    public function test_other_platform_is_not_allowed_when_the_lists_are_empty(): void
+    {
+        config(['sso.consumers.other_platforms' => ['callback_urls' => [], 'logout_urls' => []]]);
+        $this->get('/login?'.http_build_query($this->params(['redirect_uri' => 'https://preprod.rslawards.com/cognito-login'])))->assertStatus(400);
+        $this->get('/logout?'.http_build_query(['client_id' => 'shared-client', 'logout_uri' => 'https://preprod.rslawards.com/logout']))->assertStatus(400);
+    }
+
     public function test_existing_consumer_can_exchange_a_single_use_code_and_state_is_opaque(): void
     {
         $code = $this->issue();

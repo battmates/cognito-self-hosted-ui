@@ -97,6 +97,10 @@ This is not a general OIDC server: implicit/client-credentials/refresh-token gra
 
 The local repository contracts and portal are tested; a live switch of staging application settings has **not** been performed.
 
+## Additional platforms without cards
+
+Additional sites can use the portal without a dashboard card or sign-in branding. Set `OTHER_PLATFORM_CALLBACK` to a comma-separated list of exact HTTPS callback URLs and `OTHER_PLATFORM_SIGNOUT` to the corresponding allowed sign-out URLs. Both default to empty (no additional destinations). These sites must use the portal's configured Cognito client ID/secret and exchange portal-issued codes at the portal's `/oauth2/token` endpoint. Rebuild the server configuration cache after changing either list with `php artisan config:cache`.
+
 ## Greenroom
 
 Greenroom has its own application card and sign-in branding. Set `SSO_GREENROOM_URL=https://greenroom.rslgroup.io`, `SSO_GREENROOM_CALLBACK_URLS=https://greenroom.rslgroup.io/cognito-login` and `SSO_GREENROOM_LOGOUT_URLS=https://greenroom.rslgroup.io/logout`. Callback and logout values accept comma-separated exact URLs; these are the portal's allowlists, separate from Cognito's app-client settings. Confirm the paths against the site's actual redirects, then rebuild the configuration cache after changing server environment values.

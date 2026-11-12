@@ -39,6 +39,11 @@ return [
             'logout_urls' => $csv(env('SSO_GREENROOM_LOGOUT_URLS')),
         ],
         'spotlight' => ['label' => 'Spotlight', 'base_url' => env('SSO_SPOTLIGHT_URL'), 'callback_urls' => $csv(env('SSO_SPOTLIGHT_CALLBACK_URLS')), 'logout_urls' => $csv(env('SSO_SPOTLIGHT_LOGOUT_URLS'))],
+        // Authorized return URLs only: no application card or sign-in branding.
+        'other_platforms' => [
+            'callback_urls' => $csv(env('OTHER_PLATFORM_CALLBACK')),
+            'logout_urls' => $csv(env('OTHER_PLATFORM_SIGNOUT')),
+        ],
     ],
     'management_roles' => ['admin', 'administrator', 'ops_manager'],
     'admin_role_attributes' => $csv(env('COGNITO_ADMIN_ROLE_ATTRIBUTES', 'custom:user_role,custom:user_type')),

@@ -207,7 +207,8 @@ class MigrationPasswordChallengeTest extends TestCase
         }
         $url = $response->headers->get('Location');
         parse_str(parse_url($url, PHP_URL_QUERY), $query);
-        $this->get($url)->assertOk()->assertSee('Create your single sign-on password');
+        $this->get($url)->assertOk()->assertSee('Choose a stronger Single Sign On password')
+            ->assertSee('your current password does not meet the security requirements of our Single Sign On system');
         app(CognitoIdentityService::class)->shouldReceive('loginWithCognito')->once()->andReturn([
             'user' => ['username' => 'canonical-user'], 'tokens' => ['id_token' => 'private-token'],
         ]);

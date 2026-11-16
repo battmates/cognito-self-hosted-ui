@@ -158,7 +158,6 @@ if (form && dialog && typeof dialog.showModal === 'function') {
         passwordForm.elements.challenge.value = data.challenge_id;
         passwordForm.elements.login_progress.value = form.elements.login_progress.value;
         newPassword.minLength = data.requirements.minimum_length;
-        passwordDialog.querySelector('[data-password-setup-description]').textContent = 'We verified your account. Create a stronger password to finish setting up single sign-on.';
         const labels = { minimum_length: `At least ${data.requirements.minimum_length} characters`, uppercase: 'An uppercase letter', lowercase: 'A lowercase letter', numbers: 'A number', symbols: 'A symbol' };
         requirementsList.replaceChildren(...Object.entries(labels).filter(([key]) => data.requirements[key]).map(([key, label]) => {
             const item = document.createElement('li');

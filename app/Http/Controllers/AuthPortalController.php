@@ -525,15 +525,22 @@ class AuthPortalController extends Controller
 
     private function renderPage(Request $request, string $page, ?array $authStatus = null): View
     {
+        $authStatus ??= $request->session()->get('auth.status', [
+            'authenticated' => false,
+            'user' => null,
+        ]);
+        $applications = Arr::only(config('sso.consumers', []), ['cloud', 'backstage', 'guestlist', 'musicteacher', 'greenroom']);
+        $roles = array_merge(Arr::wrap($authStatus['user']['roles'] ?? []), Arr::wrap($authStatus['user']['user_role'] ?? null));
+        if (collect($roles)->contains(fn ($role) => is_string($role) && in_array(strtolower(trim($role)), ['learner', 'parent'], true))) {
+            $applications = Arr::except($applications, ['musicteacher', 'greenroom']);
+        }
+
         return view('portal.index', [
             'page' => $page,
             'portalContext' => $this->capturePortalContext($request),
-            'authStatus' => $authStatus ?? $request->session()->get('auth.status', [
-                'authenticated' => false,
-                'user' => null,
-            ]),
+            'authStatus' => $authStatus,
             'socialProviders' => $this->identity->socialProviders(),
-            'applications' => Arr::only(config('sso.consumers', []), ['cloud', 'backstage', 'guestlist', 'musicteacher', 'greenroom']),
+            'applications' => $applications,
         ]);
     }
 

@@ -5,8 +5,8 @@
 <div class="portal-dialog-panel password-setup-panel">
     <div class="login-progress-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10" width="14" height="11" rx="3"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"/></svg></div>
     <p class="login-progress-eyebrow">YOUR ACCOUNT IS VERIFIED</p>
-    <h2 class="portal-heading login-progress-title" id="migration-password-title" tabindex="-1">Create your single sign-on password</h2>
-    <p class="portal-copy" id="migration-password-description" data-password-setup-description>We verified your account. Create a stronger password to finish setting up single sign-on.</p>
+    <h2 class="portal-heading login-progress-title" id="migration-password-title" tabindex="-1">Choose a stronger Single Sign On password</h2>
+    <p class="portal-copy" id="migration-password-description" data-password-setup-description>Your account has been verified, but your current password does not meet the security requirements of our Single Sign On system. Choose a stronger password below to continue.</p>
     <form method="POST" action="{{ route('portal.login.migration.password.store') }}" class="password-setup-form" data-password-setup>
         @csrf
         <input type="hidden" name="challenge" value="{{ $setup['challenge_id'] ?? '' }}">
@@ -33,7 +33,7 @@
                 @if ($requirements[$key])<li data-requirement="{{ $key }}"><span aria-hidden="true">○</span><span>{{ $label }}</span></li>@endif
             @endforeach
         </ul>
-        <p class="portal-copy password-setup-note">Use this new password for future single sign-on. Your original platform password will stay the same.</p>
+        <p class="portal-copy password-setup-note">Use this new password whenever you sign in through Single Sign On. Your password on the original platform will stay the same.</p>
         <button type="submit" class="password-setup-submit">Create password and continue</button>
         @if ($standalone ?? false)
             <a class="password-setup-cancel portal-copy" href="{{ route('portal.login') }}">Back to sign in</a>

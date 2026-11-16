@@ -232,6 +232,38 @@ class AuthorizationBrokerTest extends TestCase
         $this->withSession($this->auth())->get('/')->assertOk()->assertSee('Edit profile')->assertSee('https://staging.guestlist.rockschool.io', false)->assertSessionMissing('portal.authorization');
     }
 
+    #[DataProvider('dashboardRoles')]
+    public function test_dashboard_hides_staff_platforms_for_learner_and_parent_roles(array $claims, bool $restricted): void
+    {
+        $session = $this->auth();
+        $session['auth']['status']['user'] = app(CognitoIdentityService::class)->buildSessionUser($claims);
+        $response = $this->withSession($session)->get('/')->assertOk()
+            ->assertSee('Cloud logo')->assertSee('Backstage logo')->assertSee('Guestlist logo')
+            ->assertViewHas('applications', fn ($apps) => array_key_exists('musicteacher', $apps) === ! $restricted
+                && array_key_exists('greenroom', $apps) === ! $restricted);
+
+        if ($restricted) {
+            $response->assertDontSee('MusicTeacher logo')->assertDontSee('Greenroom logo');
+        } else {
+            $response->assertSee('MusicTeacher logo')->assertSee('Greenroom logo');
+        }
+    }
+
+    public static function dashboardRoles(): array
+    {
+        return [
+            'learner attribute' => [['custom:user_role' => 'learner'], true],
+            'parent attribute' => [['custom:user_role' => 'parent'], true],
+            'legacy role attribute' => [['custom:user_type' => 'learner'], true],
+            'case and whitespace' => [['custom:user_role' => ' Parent '], true],
+            'multiple roles' => [['custom:user_role' => 'learner', 'cognito:groups' => ['administrator']], true],
+            'group role' => [['cognito:groups' => ['parent']], true],
+            'teacher' => [['custom:user_role' => 'teacher'], false],
+            'administrator' => [['custom:user_role' => 'administrator'], false],
+            'no role' => [[], false],
+        ];
+    }
+
     public function test_session_tokens_for_another_client_cannot_be_handed_off(): void
     {
         $session = $this->auth();

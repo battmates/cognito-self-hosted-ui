@@ -1,7 +1,11 @@
 @extends('layouts.app')
 @section('content')
 @php
-    $currentAction = old('action', 'confirm');
+    $actions = ['confirm' => 'Confirm account', 'enable' => 'Enable account', 'disable' => 'Disable account', 'sign_out' => 'Sign out all sessions', 'delete' => 'Delete user'];
+    if ($canManagePasswords) {
+        $actions = ['set_password' => 'Set password'] + $actions;
+    }
+    $currentAction = array_key_exists(old('action', 'confirm'), $actions) ? old('action', 'confirm') : 'confirm';
     $displayName = trim(($attributes['given_name'] ?? '').' '.($attributes['family_name'] ?? ''));
 @endphp
 <main class="portal-shell mx-auto w-full max-w-7xl space-y-6 px-5 py-8 lg:px-10">
@@ -39,17 +43,19 @@
                 <legend id="manage-account-title" class="portal-heading text-2xl mb-5">Manage account</legend>
                 <label class="portal-label block max-w-xl">Action
                     <select class="portal-input w-full mt-2 rounded-xl border px-4 py-3" name="action" id="admin-action">
-                        @foreach(['confirm' => 'Confirm account', 'reset_password' => 'Send password reset', 'set_password' => 'Set password', 'enable' => 'Enable account', 'disable' => 'Disable account', 'sign_out' => 'Sign out all sessions', 'delete' => 'Delete user'] as $action => $label)
+                        @foreach($actions as $action => $label)
                             <option value="{{ $action }}" @selected($currentAction === $action) @disabled($action === 'delete' && $isOwnAccount)>{{ $label }}</option>
                         @endforeach
                     </select>
                 </label>
                 @if($isOwnAccount)<p class="portal-copy text-sm">You cannot delete your own account.</p>@endif
+                @if($canManagePasswords)
                 <div id="admin-password-fields" @if($currentAction !== 'set_password') hidden @endif class="max-w-xl space-y-4">
                     <label class="portal-label block">New password<input class="portal-input w-full mt-2 rounded-xl border px-4 py-3" type="password" name="password" autocomplete="new-password" @disabled($currentAction !== 'set_password') @required($currentAction === 'set_password')></label>
                     <label class="portal-label block">Confirm password<input class="portal-input w-full mt-2 rounded-xl border px-4 py-3" type="password" name="password_confirmation" autocomplete="new-password" @disabled($currentAction !== 'set_password') @required($currentAction === 'set_password')></label>
                     <label class="portal-copy flex gap-2"><input type="checkbox" name="temporary" value="1" @checked(old('temporary')) @disabled($currentAction !== 'set_password')>Require a password change at next sign-in</label>
                 </div>
+                @endif
                 <div id="admin-delete-fields" @if($currentAction !== 'delete') hidden @endif class="space-y-4 rounded-xl border border-[#edd7b5] bg-[#fff7e8] p-5 text-[#8a3030]">
                     <h3 class="text-lg font-semibold">Permanently delete this user</h3>
                     <p>This permanently removes the sign-in account from the shared user pool and cannot be undone. Records held by the other applications remain.</p>
@@ -70,12 +76,14 @@
     const deleteFields = document.getElementById('admin-delete-fields');
     const button = document.getElementById('admin-apply-action');
     action.addEventListener('change', () => {
-        passwordFields.hidden = action.value !== 'set_password';
-        passwordFields.querySelectorAll('input').forEach(input => {
-            input.disabled = passwordFields.hidden;
-            input.required = !passwordFields.hidden && input.type === 'password';
-            if (passwordFields.hidden) { if (input.type === 'checkbox') input.checked = false; else input.value = ''; }
-        });
+        if (passwordFields) {
+            passwordFields.hidden = action.value !== 'set_password';
+            passwordFields.querySelectorAll('input').forEach(input => {
+                input.disabled = passwordFields.hidden;
+                input.required = !passwordFields.hidden && input.type === 'password';
+                if (passwordFields.hidden) { if (input.type === 'checkbox') input.checked = false; else input.value = ''; }
+            });
+        }
         deleteFields.hidden = action.value !== 'delete';
         const confirmation = deleteFields.querySelector('input');
         confirmation.disabled = deleteFields.hidden;

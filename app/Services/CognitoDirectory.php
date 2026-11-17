@@ -124,6 +124,21 @@ class CognitoDirectory
         return false;
     }
 
+    public static function canManagePasswords(array $user): bool
+    {
+        if (! ($user['Enabled'] ?? false) || ! in_array($user['UserStatus'] ?? '', ['CONFIRMED', 'EXTERNAL_PROVIDER'], true)) {
+            return false;
+        }
+        $attributes = array_column($user['UserAttributes'] ?? [], 'Value', 'Name');
+        foreach (config('sso.admin_role_attributes') as $name) {
+            if (in_array(strtolower(trim((string) ($attributes[$name] ?? ''))), ['admin', 'administrator'], true)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public function hasIdentity(string $identifier): bool
     {
         return $this->resolveUsername($identifier) !== null;
@@ -152,7 +167,7 @@ class CognitoDirectory
         $this->assertWritesEnabled();
         $operation = match ($action) {
             'confirm' => 'adminConfirmSignUp', 'enable' => 'adminEnableUser', 'disable' => 'adminDisableUser',
-            'reset_password' => 'adminResetUserPassword', 'sign_out' => 'adminUserGlobalSignOut', 'set_password' => 'adminSetUserPassword',
+            'sign_out' => 'adminUserGlobalSignOut', 'set_password' => 'adminSetUserPassword',
             'delete' => 'adminDeleteUser',
             default => throw new RuntimeException('Unsupported user management action.'),
         };
@@ -172,6 +187,11 @@ class CognitoDirectory
         }
         $parameters = ['UserPoolId' => config('services.cognito.user_pool_id'), 'Username' => $username];
         if ($action === 'set_password') {
+            $actorUsername = $input['actor_username'] ?? null;
+            $actor = is_string($actorUsername) && $actorUsername !== '' ? $this->get($actorUsername) : null;
+            if (! $actor || ! self::canManagePasswords($actor)) {
+                throw new RuntimeException('Only a full administrator can set user passwords.');
+            }
             $parameters['Password'] = $input['password'];
             $parameters['Permanent'] = ! ($input['temporary'] ?? false);
         }

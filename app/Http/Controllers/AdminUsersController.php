@@ -40,6 +40,7 @@ class AdminUsersController extends Controller
                 'attributes' => $directory->attributes($selected),
                 'listContext' => Arr::only($input, ['field', 'q']),
                 'writesEnabled' => config('sso.management_writes_enabled'),
+                'canManagePasswords' => CognitoDirectory::canManagePasswords($request->attributes->get('portal.actor', [])),
                 'isOwnAccount' => strcasecmp($selected['Username'], (string) $request->session()->get('auth.status.user.username')) === 0,
             ]);
         }
@@ -48,6 +49,7 @@ class AdminUsersController extends Controller
             'authStatus' => $request->session()->get('auth.status'), 'users' => $page['Users'] ?? [],
             'cursor' => $page['PaginationToken'] ?? null,
             'writesEnabled' => config('sso.management_writes_enabled'),
+            'canManagePasswords' => CognitoDirectory::canManagePasswords($request->attributes->get('portal.actor', [])),
         ];
 
         if ($request->expectsJson()) {
@@ -65,9 +67,12 @@ class AdminUsersController extends Controller
 
     public function update(Request $request, CognitoDirectory $directory)
     {
+        if ($request->input('action') === 'set_password') {
+            abort_unless(CognitoDirectory::canManagePasswords($request->attributes->get('portal.actor', [])), 403, 'Only a full administrator can set user passwords.');
+        }
         $input = $request->validate([
             'username' => ['required', 'string', 'max:128'],
-            'action' => ['required', Rule::in(['confirm', 'enable', 'disable', 'reset_password', 'set_password', 'sign_out', 'delete'])],
+            'action' => ['required', Rule::in(['confirm', 'enable', 'disable', 'set_password', 'sign_out', 'delete'])],
             'password' => ['required_if:action,set_password', 'nullable', 'string', 'confirmed', 'max:256'],
             'temporary' => ['nullable', 'boolean'], 'confirm_action' => ['accepted'],
             'return_to' => ['nullable', Rule::in(['list'])],
@@ -77,7 +82,7 @@ class AdminUsersController extends Controller
             'q' => ['nullable', 'string', 'max:128'], 'cursor' => ['nullable', 'string', 'max:4096'],
         ]);
         $actor = $request->session()->get('auth.status.user.username');
-        if ($input['username'] === $actor && in_array($input['action'], ['disable', 'reset_password', 'set_password', 'sign_out', 'delete'], true)) {
+        if ($input['username'] === $actor && in_array($input['action'], ['disable', 'set_password', 'sign_out', 'delete'], true)) {
             throw ValidationException::withMessages(['action' => 'Use another administrator to change your own account.']);
         }
         try {

@@ -18,6 +18,86 @@ class AdminUsersTest extends TestCase
         return ['auth' => ['status' => ['authenticated' => true, 'user' => ['username' => 'admin-user', 'is_admin' => true]], 'tokens' => ['expires_at' => time() + 3600]]];
     }
 
+    private function actor(string $role = 'administrator'): array
+    {
+        return ['Username' => 'admin-user', 'Enabled' => true, 'UserStatus' => 'CONFIRMED',
+            'UserAttributes' => [['Name' => 'custom:user_role', 'Value' => $role]]];
+    }
+
+    #[DataProvider('passwordManagementRoles')]
+    public function test_only_full_administrators_see_and_can_use_password_management(string $role, bool $allowed): void
+    {
+        config(['sso.management_writes_enabled' => true]);
+        $client = $this->mock(CognitoIdentityProviderClient::class);
+        $client->shouldReceive('adminGetUser')->with(\Mockery::on(fn ($p) => $p['Username'] === 'admin-user'))->andReturn(new Result($this->actor($role)));
+        $client->shouldReceive('adminGetUser')->with(\Mockery::on(fn ($p) => $p['Username'] === 'target'))->andReturn(new Result([
+            'Username' => 'target', 'Enabled' => true, 'UserStatus' => 'CONFIRMED', 'UserAttributes' => [],
+        ]));
+        $client->shouldNotReceive('adminResetUserPassword');
+        $client->shouldReceive('listUsers')->once()->andReturn(new Result(['Users' => []]));
+        if ($allowed) {
+            $client->shouldReceive('adminSetUserPassword')->once()->with(\Mockery::on(fn ($p) => $p['Username'] === 'target' && $p['Permanent'] === true));
+        } else {
+            $client->shouldNotReceive('adminSetUserPassword');
+        }
+
+        $list = $this->withSession($this->adminSession())->get('/admin/users')->assertOk()
+            ->assertDontSee('data-row-action="reset_password"', false);
+        if ($allowed) {
+            $list->assertSee('data-row-action="set_password"', false)->assertSee('data-row-password-fields', false);
+        } else {
+            $list->assertDontSee('data-row-action="set_password"', false)->assertDontSee('<div data-row-password-fields', false);
+        }
+        $page = $this->withSession($this->adminSession())->get('/admin/users?username=target')->assertOk()
+            ->assertDontSee('value="reset_password"', false)->assertDontSee('Send password reset');
+        if ($allowed) {
+            $page->assertSee('value="set_password"', false)->assertSee('id="admin-password-fields"', false);
+        } else {
+            $page->assertDontSee('value="set_password"', false)->assertDontSee('id="admin-password-fields"', false);
+        }
+        $this->withSession($this->adminSession())->postJson('/admin/users', ['username' => 'target', 'action' => 'reset_password', 'confirm_action' => 1])->assertUnprocessable()->assertJsonValidationErrors('action');
+        $result = $this->withSession($this->adminSession())->postJson('/admin/users', [
+            'username' => 'target', 'action' => 'set_password', 'confirm_action' => 1,
+            'password' => 'TestPassword123!', 'password_confirmation' => 'TestPassword123!',
+        ]);
+        $allowed ? $result->assertRedirect() : $result->assertForbidden();
+    }
+
+    public static function passwordManagementRoles(): array
+    {
+        return [['administrator', true], ['admin', true], ['ops_manager', false]];
+    }
+
+    public function test_password_management_rechecks_a_downgraded_actor_before_the_sdk_write(): void
+    {
+        config(['sso.management_writes_enabled' => true]);
+        $client = $this->mock(CognitoIdentityProviderClient::class);
+        $client->shouldReceive('adminGetUser')->twice()->andReturn(new Result($this->actor()), new Result($this->actor('ops_manager')));
+        $client->shouldNotReceive('adminSetUserPassword');
+        $this->withSession($this->adminSession())->postJson('/admin/users', [
+            'username' => 'target', 'action' => 'set_password', 'confirm_action' => 1,
+            'password' => 'TestPassword123!', 'password_confirmation' => 'TestPassword123!',
+        ])->assertUnprocessable()->assertJsonValidationErrors('action');
+    }
+
+    public function test_the_directory_rejects_the_removed_reset_email_action(): void
+    {
+        config(['sso.management_writes_enabled' => true]);
+        $client = $this->mock(CognitoIdentityProviderClient::class);
+        $client->shouldNotReceive('adminResetUserPassword');
+        $this->expectExceptionMessage('Unsupported user management action.');
+        (new CognitoDirectory($client))->manage('target', 'reset_password');
+    }
+
+    public function test_the_directory_requires_an_authorized_actor_for_password_changes(): void
+    {
+        config(['sso.management_writes_enabled' => true]);
+        $client = $this->mock(CognitoIdentityProviderClient::class);
+        $client->shouldNotReceive('adminSetUserPassword');
+        $this->expectExceptionMessage('Only a full administrator can set user passwords.');
+        (new CognitoDirectory($client))->manage('target', 'set_password', ['password' => 'TestPassword123!']);
+    }
+
     public function test_anonymous_visitors_are_sent_to_login(): void
     {
         $this->get('/admin/users')->assertRedirect(route('portal.login'));
@@ -170,8 +250,9 @@ class AdminUsersTest extends TestCase
     {
         config(['sso.management_writes_enabled' => true]);
         $client = $this->mock(CognitoIdentityProviderClient::class);
+        $client->shouldReceive('adminGetUser')->once()->andReturn(new Result($this->actor()));
         $client->shouldReceive('adminSetUserPassword')->once()->with(\Mockery::on(fn ($input) => $input['Username'] === 'target' && $input['Password'] === 'TestPassword123!' && $input['Permanent'] === false));
-        (new CognitoDirectory($client))->manage('target', 'set_password', ['password' => 'TestPassword123!', 'temporary' => true]);
+        (new CognitoDirectory($client))->manage('target', 'set_password', ['password' => 'TestPassword123!', 'temporary' => true, 'actor_username' => 'admin-user']);
     }
 
     #[DataProvider('directoryWriteErrors')]
@@ -179,12 +260,13 @@ class AdminUsersTest extends TestCase
     {
         config(['sso.management_writes_enabled' => true]);
         $client = $this->mock(CognitoIdentityProviderClient::class);
+        $client->shouldReceive('adminGetUser')->once()->andReturn(new Result($this->actor()));
         $client->shouldReceive('adminSetUserPassword')->once()
             ->andThrow(new AwsException('AWS failure', new Command('AdminSetUserPassword'), ['code' => $code]));
 
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessage($message);
-        (new CognitoDirectory($client))->manage('target', 'set_password', ['password' => 'TestPassword123!']);
+        (new CognitoDirectory($client))->manage('target', 'set_password', ['password' => 'TestPassword123!', 'actor_username' => 'admin-user']);
     }
 
     #[DataProvider('directoryWriteErrors')]

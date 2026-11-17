@@ -1,7 +1,7 @@
 <div id="admin-row-menu" popover="auto" class="portal-card fixed m-0 w-60 max-h-[80vh] overflow-y-auto rounded-xl border p-2" aria-label="User actions">
     <p id="admin-row-menu-user" class="break-all px-3 py-2 text-sm font-semibold"></p>
     <a data-view-profile class="portal-row-menu-item" href="{{ route('portal.admin.users') }}">View profile</a>
-    @foreach(['confirm' => 'Confirm account', 'reset_password' => 'Send password reset', 'set_password' => 'Set password', 'enable' => 'Enable account', 'disable' => 'Disable account', 'sign_out' => 'Sign out all sessions', 'delete' => 'Delete user'] as $action => $label)
+    @foreach(['confirm' => 'Confirm account', ...($canManagePasswords ? ['set_password' => 'Set password'] : []), 'enable' => 'Enable account', 'disable' => 'Disable account', 'sign_out' => 'Sign out all sessions', 'delete' => 'Delete user'] as $action => $label)
         <button type="button" data-row-action="{{ $action }}" @disabled(!$writesEnabled) class="portal-row-menu-item {{ $action === 'delete' ? 'portal-row-menu-item--danger' : '' }}">{{ $label }}</button>
     @endforeach
 </div>
@@ -13,11 +13,13 @@
         <h2 id="admin-row-dialog-title" class="portal-heading text-2xl"></h2>
         <p id="admin-row-dialog-user" class="break-all font-semibold"></p>
         <p id="admin-row-dialog-description" class="portal-copy"></p>
+        @if($canManagePasswords)
         <div data-row-password-fields hidden class="space-y-4">
             <label class="portal-label block">New password<input name="password" type="password" autocomplete="new-password" class="portal-input mt-2 block w-full rounded-xl border px-4 py-3" disabled></label>
             <label class="portal-label block">Confirm password<input name="password_confirmation" type="password" autocomplete="new-password" class="portal-input mt-2 block w-full rounded-xl border px-4 py-3" disabled></label>
             <label class="portal-copy flex gap-2"><input type="checkbox" name="temporary" value="1" disabled>Require a password change at next sign-in</label>
         </div>
+        @endif
         <label data-row-delete-fields hidden class="portal-label block">Type <strong data-delete-username class="break-all"></strong> to confirm
             <input name="delete_confirmation" autocomplete="off" spellcheck="false" maxlength="128" class="portal-input mt-2 block w-full rounded-xl border px-4 py-3" disabled>
         </label>
@@ -39,7 +41,6 @@
     let trigger;
     const descriptions = {
         confirm: 'Confirm this account so the user can sign in without completing sign-up confirmation.',
-        reset_password: 'Send this user a password reset message using their registered recovery method.',
         set_password: 'Set a new password for this account.',
         enable: 'Enable sign-in for this account.',
         disable: 'Disable sign-in for this account. An administrator can enable it again later.',
@@ -88,11 +89,13 @@
         document.getElementById('admin-row-dialog-description').textContent = descriptions[action];
         dialog.querySelector('[data-delete-username]').textContent = trigger.dataset.username;
         const passwordFields = dialog.querySelector('[data-row-password-fields]');
-        passwordFields.hidden = action !== 'set_password';
-        passwordFields.querySelectorAll('input').forEach(input => {
-            input.disabled = passwordFields.hidden;
-            input.required = !passwordFields.hidden && input.type === 'password';
-        });
+        if (passwordFields) {
+            passwordFields.hidden = action !== 'set_password';
+            passwordFields.querySelectorAll('input').forEach(input => {
+                input.disabled = passwordFields.hidden;
+                input.required = !passwordFields.hidden && input.type === 'password';
+            });
+        }
         dialog.querySelector('[data-row-delete-fields]').hidden = action !== 'delete';
         form.elements.delete_confirmation.disabled = action !== 'delete';
         form.elements.delete_confirmation.required = action === 'delete';

@@ -24,6 +24,68 @@ class AdminUsersTest extends TestCase
             'UserAttributes' => [['Name' => 'custom:user_role', 'Value' => $role]]];
     }
 
+    public function test_failed_confirmation_returns_to_the_profile_even_after_a_roles_lookup(): void
+    {
+        $this->mock(CognitoDirectory::class, function ($mock) {
+            $mock->shouldReceive('get')->with('admin-user')->andReturn($this->actor());
+            $mock->shouldReceive('isAdministrator')->andReturn(true);
+            $mock->shouldReceive('roles')->andReturn(['administrator']);
+            $mock->shouldReceive('manage')->once()->andThrow(new \RuntimeException('This account needs a new password, not sign-up confirmation.'));
+        });
+        $this->withSession($this->adminSession())->getJson('/admin/roles')->assertOk();
+        $this->post('/admin/users', ['username' => 'johandroskie', 'action' => 'confirm', 'confirm_action' => 1])
+            ->assertRedirect(route('portal.admin.users', ['username' => 'johandroskie']))
+            ->assertSessionHasErrors(['action' => 'This account needs a new password, not sign-up confirmation.']);
+    }
+
+    public function test_invalid_row_action_returns_to_the_list_instead_of_a_background_endpoint(): void
+    {
+        $this->mock(CognitoDirectory::class, function ($mock) {
+            $mock->shouldReceive('get')->andReturn($this->actor());
+            $mock->shouldReceive('isAdministrator')->andReturn(true);
+            $mock->shouldNotReceive('manage');
+        });
+        $session = $this->adminSession();$session['_previous']['url'] = route('portal.admin.roles');
+        $this->withSession($session)->post('/admin/users', ['username' => 'target', 'action' => 'confirm', 'return_to' => 'list', 'field' => 'email', 'q' => 'johan'])
+            ->assertRedirect(route('portal.admin.users', ['field' => 'email', 'q' => 'johan']))->assertSessionHasErrors('confirm_action');
+    }
+
+    #[DataProvider('confirmationStatuses')]
+    public function test_confirmation_only_calls_cognito_for_an_unconfirmed_registration(string $status, bool $allowed): void
+    {
+        config(['sso.management_writes_enabled' => true]);
+        $client = $this->mock(CognitoIdentityProviderClient::class);
+        $client->shouldReceive('adminGetUser')->once()->andReturn(new Result(['Username' => 'target', 'UserStatus' => $status]));
+        if ($allowed) {
+            $client->shouldReceive('adminConfirmSignUp')->once()->andReturn(new Result);
+        } else {
+            $client->shouldNotReceive('adminConfirmSignUp');
+            $this->expectException(\RuntimeException::class);
+        }
+        (new CognitoDirectory($client))->manage('target', 'confirm');
+    }
+
+    public static function confirmationStatuses(): array
+    {
+        return [['UNCONFIRMED', true], ['FORCE_CHANGE_PASSWORD', false], ['CONFIRMED', false], ['EXTERNAL_PROVIDER', false]];
+    }
+
+    public function test_profile_explains_forced_password_change_and_roles_fetch_preserves_the_previous_page(): void
+    {
+        $this->mock(CognitoDirectory::class, function ($mock) {
+            $mock->shouldReceive('get')->with('admin-user')->andReturn($this->actor());
+            $mock->shouldReceive('get')->with('target')->andReturn(['Username' => 'target', 'Enabled' => true, 'UserStatus' => 'FORCE_CHANGE_PASSWORD']);
+            $mock->shouldReceive('isAdministrator')->andReturn(true);
+            $mock->shouldReceive('attributes')->andReturn([]);
+            $mock->shouldReceive('roles')->andReturn([]);
+        });
+        $url = route('portal.admin.users', ['username' => 'target']);
+        $this->withSession($this->adminSession())->get($url)->assertOk()
+            ->assertSee('waiting for a new password')->assertDontSee('value="confirm"', false)
+            ->assertSee("'X-Requested-With': 'XMLHttpRequest'", false);
+        $this->get('/admin/roles', ['X-Requested-With' => 'XMLHttpRequest', 'Accept' => 'application/json'])->assertOk()->assertSessionHas('_previous.url', $url);
+    }
+
     #[DataProvider('passwordManagementRoles')]
     public function test_only_full_administrators_see_and_can_use_password_management(string $role, bool $allowed): void
     {

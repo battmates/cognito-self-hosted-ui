@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Exceptions\MigrationPasswordRequiredException;
 use App\Services\AuthorizationBroker;
 use App\Services\CognitoIdentityService;
+use App\Services\ProfileSynchronization;
 use App\Services\LoginProgress;
 use App\Services\MigrationPasswordChallenge;
 use Illuminate\Contracts\View\View;
@@ -401,7 +402,7 @@ class AuthPortalController extends Controller
         return view('portal.profile', ['authStatus' => $request->session()->get('auth.status')]);
     }
 
-    public function updateProfile(Request $request): RedirectResponse
+    public function updateProfile(Request $request, ProfileSynchronization $profiles): RedirectResponse
     {
         $this->ensureAuthenticated($request);
         $input = $request->validate([
@@ -410,7 +411,7 @@ class AuthPortalController extends Controller
         ]);
 
         try {
-            $this->identity->updateOwnProfile((string) $request->session()->get('auth.tokens.access_token'), $input);
+            $profiles->updateAttributes($request->session()->get('auth.status.user', []), $input);
         } catch (RuntimeException $exception) {
             throw ValidationException::withMessages(['profile' => $exception->getMessage()]);
         }
@@ -424,7 +425,7 @@ class AuthPortalController extends Controller
         return redirect()->route('portal.profile')->with('portal.notice', 'Profile updated successfully.');
     }
 
-    public function updatePassword(Request $request): RedirectResponse
+    public function updatePassword(Request $request, ProfileSynchronization $profiles): RedirectResponse
     {
         $this->ensureAuthenticated($request);
         $input = $request->validate([
@@ -433,7 +434,7 @@ class AuthPortalController extends Controller
         ]);
 
         try {
-            $this->identity->changeOwnPassword((string) $request->session()->get('auth.tokens.access_token'), $input['current_password'], $input['password']);
+            $profiles->changePassword($request->session()->get('auth.status.user', []), (string) $request->session()->get('auth.tokens.access_token'), $input['current_password'], $input['password']);
         } catch (RuntimeException $exception) {
             throw ValidationException::withMessages(['password' => $exception->getMessage()]);
         }

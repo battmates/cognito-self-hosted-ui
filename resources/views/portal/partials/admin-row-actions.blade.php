@@ -65,7 +65,7 @@
         url.search = new URLSearchParams({field: search.elements.field.value, q: search.elements.q.value, username: button.dataset.username});
         menu.querySelector('[data-view-profile]').href = url;
         menu.querySelectorAll('[data-row-action]').forEach(action => {
-            action.disabled = !writesEnabled || (button.dataset.ownAccount === 'true' && !['confirm', 'enable'].includes(action.dataset.rowAction));
+            action.disabled = !writesEnabled || (action.dataset.rowAction === 'confirm' && button.dataset.userStatus !== 'UNCONFIRMED') || (button.dataset.ownAccount === 'true' && !['confirm', 'enable'].includes(action.dataset.rowAction));
         });
         menu.showPopover();
         const rect = button.getBoundingClientRect();

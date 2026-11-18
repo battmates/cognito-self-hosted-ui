@@ -171,6 +171,15 @@ class CognitoDirectory
             'delete' => 'adminDeleteUser',
             default => throw new RuntimeException('Unsupported user management action.'),
         };
+        if ($action === 'confirm') {
+            $target = $this->get($username);
+            if (($target['UserStatus'] ?? null) === 'FORCE_CHANGE_PASSWORD') {
+                throw new RuntimeException('This account needs a new password, not sign-up confirmation. The user must sign in with their temporary password and choose a new one, or a full administrator can set a permanent password.');
+            }
+            if (! $target || ($target['UserStatus'] ?? null) !== 'UNCONFIRMED') {
+                throw new RuntimeException('Only an unconfirmed registration can be confirmed with this action.');
+            }
+        }
         if ($action === 'delete') {
             $target = $this->get($username);
             if (! $target) {

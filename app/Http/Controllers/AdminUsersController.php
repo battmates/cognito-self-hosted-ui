@@ -6,6 +6,7 @@ use App\Services\CognitoDirectory;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use RuntimeException;
@@ -70,7 +71,7 @@ class AdminUsersController extends Controller
         if ($request->input('action') === 'set_password') {
             abort_unless(CognitoDirectory::canManagePasswords($request->attributes->get('portal.actor', [])), 403, 'Only a full administrator can set user passwords.');
         }
-        $input = $request->validate([
+        $validator = Validator::make($request->all(), [
             'username' => ['required', 'string', 'max:128'],
             'action' => ['required', Rule::in(['confirm', 'enable', 'disable', 'set_password', 'sign_out', 'delete'])],
             'password' => ['required_if:action,set_password', 'nullable', 'string', 'confirmed', 'max:256'],
@@ -81,15 +82,19 @@ class AdminUsersController extends Controller
             'field' => ['nullable', Rule::in(['email', 'username', 'given_name', 'family_name', 'sub'])],
             'q' => ['nullable', 'string', 'max:128'], 'cursor' => ['nullable', 'string', 'max:4096'],
         ]);
+        if ($validator->fails()) {
+            throw (new ValidationException($validator))->redirectTo($this->actionReturnUrl($request));
+        }
+        $input = $validator->validated();
         $actor = $request->session()->get('auth.status.user.username');
         if ($input['username'] === $actor && in_array($input['action'], ['disable', 'set_password', 'sign_out', 'delete'], true)) {
-            throw ValidationException::withMessages(['action' => 'Use another administrator to change your own account.']);
+            throw ValidationException::withMessages(['action' => 'Use another administrator to change your own account.'])->redirectTo($this->actionReturnUrl($request));
         }
         try {
             $directory->manage($input['username'], $input['action'], [...$input, 'actor_username' => $actor]);
         } catch (RuntimeException $e) {
             Log::notice('portal.user_management', ['actor' => $actor, 'target' => $input['username'], 'action' => $input['action'], 'outcome' => 'failed']);
-            throw ValidationException::withMessages(['action' => $e->getMessage()]);
+            throw ValidationException::withMessages(['action' => $e->getMessage()])->redirectTo($this->actionReturnUrl($request));
         }
         Log::notice('portal.user_management', ['actor' => $actor, 'target' => $input['username'], 'action' => $input['action'], 'outcome' => 'succeeded']);
 
@@ -137,6 +142,23 @@ class AdminUsersController extends Controller
         } catch (RuntimeException) {
             return response()->json(['message' => 'The role list is unavailable. Please try again.'], 503);
         }
+    }
+
+    private function actionReturnUrl(Request $request): string
+    {
+        $query = [];
+        foreach (['field' => 32, 'q' => 128] as $name => $limit) {
+            $value = $request->input($name);
+            if (is_string($value) && strlen($value) <= $limit) {
+                $query[$name] = $value;
+            }
+        }
+        $username = $request->input('username');
+        if ($request->input('return_to') !== 'list' && is_string($username) && $username !== '' && strlen($username) <= 128) {
+            $query['username'] = $username;
+        }
+
+        return route('portal.admin.users', $query);
     }
 
     private function actorRole(Request $request, CognitoDirectory $directory): string

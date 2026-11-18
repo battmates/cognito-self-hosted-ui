@@ -30,7 +30,7 @@
         if (isNew) newRoleInput.focus();
     };
     select.addEventListener('change', setNewRoleVisibility);
-    fetch(picker.dataset.rolesUrl, { headers: { Accept: 'application/json' }, credentials: 'same-origin', cache: 'no-store' })
+    fetch(picker.dataset.rolesUrl, { headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin', cache: 'no-store' })
         .then(response => response.ok ? response.json() : Promise.reject())
         .then(data => {
             if (!Array.isArray(data.roles) || !data.roles.every(role => typeof role === 'string')) throw new Error();

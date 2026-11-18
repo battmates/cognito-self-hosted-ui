@@ -1,0 +1,70 @@
+.portal-responsive-table {
+    width: 100%;
+    min-width: 0;
+}
+
+.portal-responsive-table table.dataTable {
+    width: 100% !important;
+    table-layout: auto;
+}
+
+.portal-responsive-table table.dataTable td {
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+/* Preserve useful column widths when Responsive measures its hidden clone;
+   otherwise long labels can shrink to one character per line on phones. */
+.portal-responsive-table table.dataTable th {
+    white-space: nowrap;
+}
+
+.portal-responsive-table table.dataTable > tbody > tr:not(.child) > td:first-child {
+    min-width: 8rem;
+}
+
+/* Leave room for Responsive's expand control. The management table's cell
+   padding otherwise overrides it, placing it on top of the username. */
+.portal-responsive-table table.dataTable.dtr-inline.collapsed > tbody > tr > td.dtr-control {
+    padding-left: 2rem;
+    cursor: pointer;
+}
+
+.portal-responsive-table table.dataTable.dtr-inline.collapsed > tbody > tr > td.dtr-control::before {
+    left: .5rem;
+}
+
+.portal-responsive-table table.dataTable > tbody > tr.child > td {
+    padding: 1rem;
+    text-align: left;
+}
+
+.portal-responsive-table table.dataTable > tbody > tr.child ul.dtr-details {
+    display: block;
+    width: 100%;
+}
+
+.portal-responsive-table table.dataTable > tbody > tr.child ul.dtr-details > li {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr);
+    gap: .5rem 1rem;
+    padding: .65rem 0;
+    border-color: var(--portal-divider);
+    white-space: normal;
+}
+
+.portal-responsive-table .dtr-title,
+.portal-responsive-table .dtr-data {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.portal-responsive-table .dtr-title { color: var(--portal-heading); }
+.portal-responsive-table .portal-status-badge { white-space: normal; }
+
+@media (max-width: 480px) {
+    .portal-responsive-table table.dataTable > tbody > tr.child ul.dtr-details > li {
+        grid-template-columns: minmax(0, 1fr);
+        gap: .25rem;
+    }
+}

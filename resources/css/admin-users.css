@@ -28,9 +28,18 @@
     box-shadow: none;
 }
 
-#admin-search-results table.dataTable > tbody > tr > td:last-child {
+#admin-search-results table.dataTable > tbody > tr:not(.child) > td:last-child {
     padding-right: 0;
     text-align: right;
+}
+
+#admin-search-results table.dataTable.dtr-inline.collapsed > tbody > tr > td.dtr-control {
+    padding-left: 2rem;
+}
+
+#admin-search-results table.dataTable > tbody > tr.child > td {
+    padding: 1rem;
+    text-align: left;
 }
 
 #admin-search-results table.dataTable > tbody > tr > td.dt-empty {

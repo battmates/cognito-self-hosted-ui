@@ -2,7 +2,8 @@
 @section('content')
 <main class="portal-shell mx-auto w-full max-w-3xl space-y-6 px-5 py-8 lg:px-10">
     <a class="font-semibold text-[#3da7c7]" href="{{ route('portal.home') }}">← Your applications</a>
-    <div><h1 class="portal-title text-4xl">Edit profile</h1><p class="portal-copy mt-3">Update your name or change your password. Your email address, access role, and other account settings are managed separately.</p></div>
+    <div><h1 class="portal-title text-4xl">Edit profile</h1><p class="portal-copy mt-3">Name changes are saved to accounts in our Single Sign On system with the same email address. Password changes apply to matching native accounts; social sign-in passwords stay with their provider. Your email address, access role, and other account settings are managed separately.</p></div>
+    <p class="portal-copy text-sm">A verified email address is required to share changes with other accounts. To change a native password, sign in with your native Single Sign On username and password.</p>
     @if(session('portal.notice'))<p role="status" class="portal-card rounded-xl border p-4">{{ session('portal.notice') }}</p>@endif
     @if($errors->any())<p role="alert" class="text-[#b56f2f]">{{ $errors->first() }}</p>@endif
     <section class="portal-card rounded-xl border p-6"><h2 class="portal-heading text-2xl">Your name</h2><form method="POST" action="{{ route('portal.profile.update') }}" class="mt-5 grid gap-4 md:grid-cols-2">@csrf @method('PUT')

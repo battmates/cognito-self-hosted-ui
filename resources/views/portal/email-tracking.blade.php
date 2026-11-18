@@ -1,6 +1,6 @@
 @extends('layouts.app')
 @section('content')
-<main class="portal-shell mx-auto w-full max-w-7xl space-y-6 px-5 py-8 lg:px-10">
+<main class="portal-shell min-w-0 mx-auto w-full max-w-7xl space-y-6 px-5 py-8 lg:px-10">
     <a class="font-semibold text-[#3da7c7]" href="{{ route('portal.home') }}">← Your applications</a>
     <div class="flex flex-wrap items-end justify-between gap-5">
         <div>
@@ -55,14 +55,15 @@
         <h2 class="portal-heading text-2xl">Message activity</h2>
         <p class="portal-copy mt-3">Incoming SES status events appear here after event publishing is activated. Each row is a status update for an email, so delivery and bounce history remains visible.</p>
         <div class="mt-5 flex flex-wrap gap-4">
-        <label class="portal-label block min-w-52 max-w-xs">Status
+        <label class="portal-label block w-full min-w-0 sm:w-52">Status
             <select id="email-event-type" class="portal-input mt-2 block w-full rounded-xl border px-4 py-3"><option value="">All statuses</option>@foreach($eventTypes as $eventType)<option value="{{ $eventType }}">{{ $eventType }}</option>@endforeach</select>
         </label>
-        <label class="portal-label block min-w-52 max-w-sm">Search
+        <label class="portal-label block w-full min-w-0 sm:max-w-sm">Search
             <input id="email-event-search" type="search" class="portal-input mt-2 block w-full rounded-xl border px-4 py-3" placeholder="Email address, status, or message ID">
         </label>
         </div>
-        <div class="mt-5" id="email-events-results"><table class="w-full" id="email-events-table" data-events-url="{{ route('portal.admin.email-events') }}"><thead><tr><th>Recipient</th><th>Subject</th><th>Status</th><th>Event time</th><th>Actions</th></tr></thead><tbody></tbody></table></div>
+        <p class="portal-copy mt-3 text-sm">On smaller screens, use the expand control beside a recipient to see all fields.</p>
+        <div class="mt-5 min-w-0" id="email-events-results"><table class="w-full" id="email-events-table" data-events-url="{{ route('portal.admin.email-events') }}"><thead><tr><th>Recipient</th><th>Subject</th><th>Status</th><th>Event time</th><th>Actions</th></tr></thead><tbody></tbody></table></div>
         <button id="email-events-load-more" type="button" class="mt-5 rounded-xl bg-[#3da7c7] px-6 py-3 font-semibold text-white" hidden>Load more</button>
     </section>
 </main>

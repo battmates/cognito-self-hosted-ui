@@ -4,6 +4,7 @@ import 'datatables.net-dt/css/dataTables.dataTables.css';
 import 'datatables.net-responsive-dt';
 import 'datatables.net-responsive-dt/css/responsive.dataTables.css';
 import '../css/email-tracking.css';
+import { adaptManagementTable } from './responsive-table';
 
 const dataNode = document.getElementById('email-tracking-data');
 
@@ -70,7 +71,7 @@ if (dataNode) {
         let controller;
         let searchTimer;
         const table = new DataTable(eventTable, {
-        paging: false, searching: false, info: false, order: [[3, 'desc']], autoWidth: false,
+        paging: false, searching: false, info: false, order: [[3, 'desc']], autoWidth: true,
         responsive: { details: { type: 'inline' } },
         columns: [{ data: 0 }, { data: 1 }, { data: 2, render: (value, type) => type === 'display' ? badge(value) : value }, { data: 3 }, {
             data: null, orderable: false, searchable: false, render: (value, type) => type === 'display' ? '<button type="button" class="email-event-detail-button">View detail</button>' : '',
@@ -84,6 +85,7 @@ if (dataNode) {
         ],
         language: { emptyTable: report.eventTopicReady ? 'No SES email events have arrived yet.' : 'SES event publishing is not configured yet.', zeroRecords: 'No matching email events.' },
         });
+        adaptManagementTable(table);
         const loadEvents = async (replace = false) => {
             controller?.abort();
             controller = new AbortController();

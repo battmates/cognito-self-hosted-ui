@@ -3,6 +3,7 @@ import 'datatables.net-dt/css/dataTables.dataTables.css';
 import 'datatables.net-responsive-dt';
 import 'datatables.net-responsive-dt/css/responsive.dataTables.css';
 import '../css/admin-users.css';
+import { adaptManagementTable } from './responsive-table';
 
 (() => {
     const form = document.getElementById('admin-search-form');
@@ -20,18 +21,20 @@ import '../css/admin-users.css';
         paging: false,
         searching: false,
         info: false,
-        autoWidth: false,
+        autoWidth: true,
         responsive: { details: { type: 'inline' } },
         order: [],
         layout: { topStart: null, topEnd: null, bottomStart: null, bottomEnd: null },
         columnDefs: [
             { targets: 0, responsivePriority: 1 },
-            { targets: 1, responsivePriority: 2 },
+            { targets: 1, responsivePriority: 3 },
             { targets: [2, 3, 4], responsivePriority: 10 },
             { targets: 5, orderable: false, searchable: false, responsivePriority: 1 },
         ],
         language: { emptyTable: 'No accounts loaded.' },
     });
+
+    adaptManagementTable(table);
 
     const updateCursor = (cursor) => {
         let button = results.querySelector('[data-load-more]');

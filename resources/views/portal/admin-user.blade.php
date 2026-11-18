@@ -5,7 +5,11 @@
     if ($canManagePasswords) {
         $actions = ['set_password' => 'Set password'] + $actions;
     }
-    $currentAction = array_key_exists(old('action', 'confirm'), $actions) ? old('action', 'confirm') : 'confirm';
+    if (($selected['UserStatus'] ?? '') !== 'UNCONFIRMED') {
+        unset($actions['confirm']);
+    }
+    $defaultAction = isset($actions['confirm']) ? 'confirm' : 'enable';
+    $currentAction = array_key_exists(old('action', $defaultAction), $actions) ? old('action', $defaultAction) : $defaultAction;
     $displayName = trim(($attributes['given_name'] ?? '').' '.($attributes['family_name'] ?? ''));
 @endphp
 <main class="portal-shell mx-auto w-full max-w-7xl space-y-6 px-5 py-8 lg:px-10">
@@ -15,6 +19,9 @@
         <h1 class="portal-title text-4xl break-all">{{ $displayName !== '' ? $displayName : $selected['Username'] }}</h1>
         @if($displayName !== '')<p class="portal-copy break-all">User name: {{ $selected['Username'] }}</p>@endif
         <p class="portal-copy">{{ $selected['UserStatus'] }} · {{ $selected['Enabled'] ? 'Enabled' : 'Disabled' }}</p>
+        @if(($selected['UserStatus'] ?? '') === 'FORCE_CHANGE_PASSWORD')
+            <p class="portal-copy">This account is waiting for a new password. The user must sign in with their temporary password and choose a new one, or a full administrator can set a permanent password. Confirm account is only for unconfirmed registrations.</p>
+        @endif
     </header>
     @unless($writesEnabled)<p class="rounded-xl border border-[#edd7b5] bg-[#fff7e8] p-4 text-[#8a6130]">Read-only mode. You can inspect accounts; changes are currently disabled.</p>@endunless
     @if(session('portal.notice'))<p role="status" class="portal-card border rounded-xl p-4">{{ session('portal.notice') }}</p>@endif

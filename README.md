@@ -109,7 +109,16 @@ Greenroom has its own application card and sign-in branding. Set `SSO_GREENROOM_
 
 Set `SSO_HELP_URL` to the help guide URL (for RSL: `https://rslawards.atlassian.net/wiki/x/E4FJCQ`). When configured, every page shows a fixed Help button in the bottom-right corner, and login failures include a help-guide link. All help links open in a new tab. Leave it blank to hide both the button and support links.
 
-Set `SSO_PRIVACY_POLICY_URL` and `SSO_TERMS_URL` to external policy documents, such as the RSL PDFs shown in `.env.example`. Each configured link opens in a new browser tab. An unset URL leaves its policy name as plain text in the registration agreement; no placeholder modal or link is shown. The registration agreement remains required. After changing server environment values, run `php artisan config:clear` (or rebuild your configuration cache with `php artisan config:cache`).
+Set `SSO_PRIVACY_POLICY_URL` and `SSO_TERMS_URL` to policy document URLs. The RSL PDFs are included in `public/documents/`, so each environment can serve them on its own domain:
+
+```dotenv
+SSO_PRIVACY_POLICY_URL="${APP_URL}/documents/RSL-Group-Privacy-Notice-v1.2.pdf"
+SSO_TERMS_URL="${APP_URL}/documents/RSL-Group-Terms-Notice-v1.2.pdf"
+```
+
+Use `APP_URL=https://auth.rslgroup.io` on live and `APP_URL=https://sso.rslgroup.io` on staging. Each configured link opens in a new browser tab. An unset URL leaves its policy name as plain text in the registration agreement; no placeholder modal or link is shown. The registration agreement remains required. After changing server environment values, run `php artisan config:clear` (or rebuild your configuration cache with `php artisan config:cache`).
+
+Keep the PDFs in Git alongside the application. Both GitHub Actions deployment workflows copy `public/` into Cloudways `public_html/`, including `documents/`. The private application sync with `--delete` also retains them because they exist in the source checkout; the public web-file sync does not use `--delete`. Deploy document replacements through `public/documents/` rather than keeping the only copy on the server. Server `.env` files are excluded from deployment.
 
 ## Profile synchronization
 

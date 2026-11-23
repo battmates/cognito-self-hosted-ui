@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\CognitoException;
 use App\Exceptions\MigrationPasswordRequiredException;
 use App\Services\AuthorizationBroker;
 use App\Services\CognitoIdentityService;
@@ -282,8 +283,10 @@ class AuthPortalController extends Controller
         try {
             $result = $this->identity->register($validated);
         } catch (RuntimeException $exception) {
+            $field = $exception instanceof CognitoException && str_contains($exception->awsType, 'UsernameExistsException')
+                ? 'username' : 'email';
             throw ValidationException::withMessages([
-                'email' => [$exception->getMessage()],
+                $field => [$exception->getMessage()],
             ]);
         }
 

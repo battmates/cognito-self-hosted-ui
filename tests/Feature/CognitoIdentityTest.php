@@ -30,6 +30,19 @@ class CognitoIdentityTest extends TestCase
         return JWT::encode(array_merge(['iss' => 'https://cognito-idp.eu-west-2.amazonaws.com/test-pool', 'aud' => 'test-client', 'token_use' => 'id', 'sub' => 'subject-1', 'cognito:username' => 'canonical-user', 'email' => 'test@example.com', 'custom:user_role' => 'administrator', 'iat' => time(), 'exp' => time() + 3600], $overrides), $this->privateKey, 'RS256', 'test-key');
     }
 
+    public function test_duplicate_username_registration_error_is_attached_to_username_instead_of_email(): void
+    {
+        Http::fake(['*' => Http::response(['__type' => 'com.amazon.cognito#UsernameExistsException'], 400)]);
+
+        $this->from('/register')->post('/register', [
+            'username' => 'existing-user', 'email' => 'new@example.com',
+            'password' => 'Password123!', 'password_confirmation' => 'Password123!',
+            'first_name' => 'New', 'last_name' => 'User', 'accept_policies' => '1',
+        ])->assertRedirect('/register')
+            ->assertSessionHasErrors(['username' => 'This username is already taken. Please choose another username.'])
+            ->assertSessionDoesntHaveErrors('email');
+    }
+
     public function test_confirmation_explains_an_email_already_verified_on_another_account(): void
     {
         Http::fake(['*' => Http::response(['__type' => 'AliasExistsException'], 400)]);

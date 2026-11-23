@@ -35,7 +35,7 @@ class CognitoIdentityTest extends TestCase
         Http::fake(['*' => Http::response(['__type' => 'AliasExistsException'], 400)]);
 
         $this->post('/register/confirm', ['username' => 'new-user', 'email' => 'existing@example.com', 'code' => '123456', 'portal_request' => 'direct'])
-            ->assertSessionHasErrors(['code' => 'This email address is already verified on another account. Please sign in with your existing account or contact support.']);
+            ->assertSessionHasErrors(['code' => 'This email address is already in use. Please sign in to your existing account or reset your password.']);
 
         Http::assertSentCount(1);
         Http::assertSent(fn ($request) => $request->header('X-Amz-Target')[0] === 'AWSCognitoIdentityProviderService.ConfirmSignUp' && ! isset($request['ForceAliasCreation']));

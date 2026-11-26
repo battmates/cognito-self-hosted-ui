@@ -2,6 +2,16 @@
 
 Planned launch: Thursday 26 November 2026. Prepared and checked on 25 November 2026.
 
+DNS cutover reported by Matt on 26 November. Verified at 11:14 GMT: both authoritative nameservers, Cloudflare DNS and Google DNS return A `46.101.76.53`; the new portal responds over HTTPS. Application acceptance checks below remain pending unless individually ticked.
+
+Progress at 11:25 GMT on 26 November: Matt reports all social providers and Backstage, Guestlist and Greenroom sign-in working. Greenroom initially showed the WordPress invalid-grant message (described as token already used); logout and a fresh sign-in succeeded. Root cause is unconfirmed; repeat a clean Greenroom login before closing acceptance. Cloud team is deploying login and migration changes; Cloud acceptance is pending. Public DNS, HTTPS 200 and HTTP-to-HTTPS 301 were independently rechecked.
+
+After the Cloud release on 26 November: Cloud requested `/admin/users/cognito-login`, which was missing from the portal allowlist. Added that exact HTTPS callback alongside `/cognito/callback`, saved a private environment backup, and rebuilt configuration. Chrome then reached Cloud's `/secure` dashboard as Matt and accessed the protected Downloads page. A direct migration-service probe from the portal using a nonexistent test email obtained the service token and returned HTTP 401 with JSON `authenticated: false` and `user: null`, correctly handled as no match. No Cognito account was created by the probe. Successful legacy-user migration and explicit Cloud logout/relogin remain pending.
+
+Recovery test on 26 November: Matt subsequently confirmed Cloud login and ordinary legacy login migration work. Password recovery for a Cloud-only account is blocked: production `recoverForPasswordReset` implements WordPress lookup only, and WordPress migration is intentionally disabled. The specified test account has no matching Cognito identity. Its Mailinator inbox contains the Cloud New Account email but no reset email. The Cognito client has `PreventUserExistenceErrors=ENABLED`; a generic forgot-password success is not evidence of an email being sent. Cloud needs a trusted lookup-by-email recovery integration before this acceptance item can pass. Do not enable WordPress migration as a workaround, guess user identities, or manually create the test Cognito account to bypass this test.
+
+Recovery fix progress on 26 November: the colleague's recovery integration was pulled, and its response handling adjusted to accept Cloud's actual HTTP 200 `authenticated: false` plus `user` payload without requiring `found`. The fix and dependent recovery services were deployed to staging only. All 264 tests pass, including Cloud identity guards and fallback to the existing signed WordPress lookup. A read-only lookup from the updated staging code accepts the live API's test identity. Staging remains configured for the staging Cloud API, which returns 404/no match for that live test account. Full staging reset-email/password completion and production deployment of the compatibility fix remain pending. No test identity was provisioned and no reset email sent by these checks.
+
 Launch the portal for Cloud, Backstage, Guestlist and Greenroom first. MusicTeacher stays disabled with a grey Coming soon card until the separate activation steps below are completed. Use this checklist during the change; tick an item only after its stated check succeeds.
 
 ## Launch details
@@ -17,8 +27,8 @@ Launch the portal for Cloud, Backstage, Guestlist and Greenroom first. MusicTeac
 | Live Cognito pool | `eu-west-2_pg2smtPib`, region `eu-west-2` |
 | Shared Cognito client ID | `7gmkvrve0vnn7q28dl1jeq790d` |
 | Portal federation upstream | `eu-west-2pg2smtpib.auth.eu-west-2.amazoncognito.com` |
-| Current DNS and rollback target | CNAME `auth.rslgroup.io` → `d3v5fmhv5tow4v.cloudfront.net` |
-| Cutover DNS | Replace that CNAME with A `auth.rslgroup.io` → `46.101.76.53` |
+| Previous DNS and rollback target | CNAME `auth.rslgroup.io` → `d3v5fmhv5tow4v.cloudfront.net` |
+| Published cutover DNS | A `auth.rslgroup.io` → `46.101.76.53`, verified 26 November at 11:14 GMT |
 | Existing CNAME TTL | 600 seconds |
 
 Do not change the Cognito pool, shared client credentials, application key or federation upstream as part of the DNS switch. Keep the existing Cognito custom-domain configuration available for rollback. Do not change staging.
@@ -43,7 +53,7 @@ Do not change the Cognito pool, shared client credentials, application key or fe
 
 | Application | Destination | Allowed callback | Allowed sign-out destination |
 | --- | --- | --- | --- |
-| Cloud | `https://cloud.rslawards.com/` | `https://cloud.rslawards.com/cognito/callback` | `https://cloud.rslawards.com/signed-out` |
+| Cloud | `https://cloud.rslawards.com/` | `https://cloud.rslawards.com/admin/users/cognito-login` (deployed); `https://cloud.rslawards.com/cognito/callback` also retained | `https://cloud.rslawards.com/signed-out` |
 | Backstage | `https://backstage.rockschool.io` | `https://backstage.rockschool.io/cognito-login` | `https://backstage.rockschool.io/logout` |
 | Guestlist | `https://guestlist.rockschool.io` | `https://guestlist.rockschool.io/cognito/callback` | `https://guestlist.rockschool.io/logout` |
 | Greenroom | `https://greenroom.rslgroup.io` | `https://greenroom.rslgroup.io/cognito-login` | `https://greenroom.rslgroup.io/logout` |
@@ -58,8 +68,8 @@ Agreed launch time and timezone: __________  Rollback decision owner: __________
 
 - [ ] Take a fresh Cloudways application/database backup and confirm how to restore it. Retain the existing `APP_KEY`.
 - [ ] Record the approved portal release and Cloud release; save current Cloud configuration and rollback instructions. Freeze unrelated deployments, including pushes to `main` that trigger production deployment.
-- [ ] Confirm the Cloud release uses live Cognito credentials, the exact Cloud callback/sign-out URLs above, and portal authorization/token endpoints. Agree deployment order. Deploy ahead of DNS only if the release is compatible with both authentication systems.
-- [ ] Confirm the new Cloud API code is deployed to `rslapi.azurewebsites.net`; verify the configured service account can obtain access and verify a designated legacy test account through `/api/backstage/ssoauthenticate`. A reachable hostname alone is insufficient.
+- [x] Cloud deployment reported complete by Matt. Public login redirect uses the live shared client and `/admin/users/cognito-login`; the portal allowlist was corrected and authenticated Cloud access verified in Chrome. Explicit logout/relogin is still a separate acceptance check.
+- [x] Cloud migration service connection and negative lookup checked from the production portal against `rslapi.azurewebsites.net/api`. Service-token authentication succeeded; nonexistent account returned the expected no-match JSON contract. Matt subsequently confirmed successful legacy login migration. Forgot-password migration remains a separate blocked check below.
 - [ ] Complete Microsoft proxy updates and test its full return journey through the AWS Cognito domain. Obtain explicit agreement on provider availability if Microsoft is not ready; do not advertise an untested sign-in option as working.
 - [ ] Verify Google, Facebook and Apple use the AWS Cognito return endpoint and complete sign-in with the production pool. Check existing Apple users as well as a test identity.
 - [ ] Confirm native login, registration plus confirmation email, and password recovery on the approved release. Include the duplicate-username/email notices and any required email/MFA challenge.
@@ -71,11 +81,11 @@ Agreed launch time and timezone: __________  Rollback decision owner: __________
 ## DNS cutover
 
 - [ ] Record start time: __________. Confirm final backups and release readiness.
-- [ ] Deploy Cloud in the agreed order; confirm successful deployment.
-- [ ] In 123-reg, replace the `auth` CNAME with an A record pointing to `46.101.76.53`. A CNAME and an A record cannot coexist at the same hostname.
-- [ ] Ensure there is no stale standalone AAAA record pointing to another server. The old CloudFront IPv6 answers obtained through its CNAME are not standalone records to edit.
-- [ ] Keep the new record TTL at 600 seconds if available. Save the DNS change time: __________.
-- [ ] Check the authoritative DNS and public recursive resolvers. Allow for old cached answers; 600 seconds is not a guarantee that all browsers and servers switch simultaneously.
+- [x] Cloud deployment reported complete; portal callback mismatch resolved and authenticated Cloud access verified on 26 November.
+- [x] Matt replaced the `auth` CNAME with A `46.101.76.53`; verified on both authoritative nameservers at 11:14 GMT on 26 November.
+- [x] Authoritative lookup returns no CNAME or AAAA record for `auth.rslgroup.io`.
+- [x] New A record TTL is 600 seconds. Exact save time not recorded; first verified at 11:14 GMT.
+- [x] Both authoritative nameservers and public resolvers `1.1.1.1` and `8.8.8.8` return the new A record. Older cached answers may remain elsewhere.
 - [ ] Test from a device without a hosts override, preferably on another network. Remove the testing Mac's override when validating public DNS and flush its local DNS cache as appropriate.
 - [ ] Monitor for split-DNS failures: a browser reaching the portal while a linked server still exchanges codes with Cognito can produce `invalid_grant`. Retry a fresh login after resolution is consistent; do not reuse an old authorization code.
 
@@ -92,16 +102,23 @@ The expected public A answer is `46.101.76.53`. Inspect the page as well as the 
 
 ## Production acceptance checks
 
-- [ ] Portal loads over HTTPS on public DNS; HTTP redirects to HTTPS.
+Keep existing Backstage, Guestlist and Greenroom sessions intact. Do not perform a blanket logout or clear session stores for this DNS change. Test existing sessions alongside fresh sign-ins. A login that straddles the cutover may need to be restarted with a fresh authorization code.
+
+- [x] Portal loads over HTTPS on public DNS; HTTP redirects to HTTPS. Rechecked 26 November at 11:25 GMT.
 - [ ] Native Cognito login succeeds, including an account with a configured verification challenge.
 - [ ] Registration and email confirmation succeed using a disposable test account.
 - [ ] Password recovery succeeds for a designated existing Cognito test account.
-- [ ] Cloud legacy migration succeeds using an email address and a designated legacy test account. Username-only login correctly skips Cloud verification.
-- [ ] Google, Facebook, Apple and Microsoft sign-in complete successfully.
-- [ ] Backstage: sign in from the site, access an authorised page, then sign out and back in.
-- [ ] Guestlist: sign in from the site, access an authorised page, then sign out and back in.
-- [ ] Greenroom: sign in from the site, access an authorised page, then sign out and back in.
-- [ ] Cloud: sign in from the site, access an authorised page, then sign out and back in.
+- [x] Cloud legacy login migration reported working by Matt on 26 November.
+- [ ] Confirm username-only login correctly skips Cloud verification.
+- [ ] Cloud-only account password recovery migration: compatibility fix is deployed to staging and API lookup tested. Complete staging recovery with a Cloud staging test account, then obtain production rollout approval and verify Cognito provisioning, reset-email receipt, password reset and subsequent sign-in on production.
+- [x] Google, Facebook, Apple and Microsoft sign-in reported working by Matt on 26 November.
+- [x] Backstage sign-in reported working by Matt on 26 November.
+- [x] Guestlist sign-in reported working by Matt on 26 November.
+- [x] Greenroom sign-in reported working after logout and retry by Matt on 26 November.
+- [ ] Repeat Greenroom sign-in in a fresh private window; verify no recurring invalid-grant error. Investigate if a fresh flow fails again.
+- [ ] Backstage, Guestlist and Greenroom: complete the remaining authorised-page and explicit logout/relogin checks for each site.
+- [x] Cloud login through the corrected callback reaches `/secure`, and the protected Downloads page is accessible in Matt's Chrome session.
+- [ ] Cloud: explicitly sign out and back in, verifying the deployed sign-out destination.
 - [ ] Test a fresh browser session, an existing app session and switching between applications. Confirm expected roles and access permissions.
 - [ ] Confirm MusicTeacher remains Coming soon and no MusicTeacher migration messages or requests occur. Existing Cognito identities remain usable for the other applications.
 - [ ] Monitor portal, Cloud and linked-app logs for callback errors, `invalid_grant`, verification errors and HTTP 5xx responses. Do not copy passwords, tokens or full authentication URLs into the checklist.

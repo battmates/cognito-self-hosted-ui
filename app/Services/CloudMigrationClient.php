@@ -122,8 +122,9 @@ class CloudMigrationClient
             && array_key_exists('user', $data) && $data['user'] === null) {
             return null;
         }
-        // Login/credential rejection responses must never authorize recovery.
-        if (! is_array($data) || ($data['found'] ?? null) !== true
+        // Cloud's recovery response omits `found`. Keep accepting an explicit
+        // true flag, but reject contradictory flags and login/error responses.
+        if (! is_array($data) || (array_key_exists('found', $data) && $data['found'] !== true)
             || ($data['authenticated'] ?? null) !== false || ! is_array($data['user'] ?? null)) {
             throw new RuntimeException('Cloud password recovery returned an invalid response.');
         }

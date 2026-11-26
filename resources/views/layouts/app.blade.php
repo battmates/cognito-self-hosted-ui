@@ -82,10 +82,12 @@
                 <div class="portal-staging-badge" aria-label="Staging environment">staging</div>
             @endif
 
-            <footer class="flex justify-center px-6 pb-8 pt-4 lg:pb-10">
+            <footer class="flex flex-col items-center justify-center gap-4 px-6 pb-8 pt-4 text-center lg:pb-10">
                 <div aria-label="Next Gen Backstage" class="portal-footer-logo h-auto w-[132px] opacity-90">
                     {!! $footerLogo !!}
                 </div>
+
+                <p class="portal-copy max-w-3xl" style="font-size: 0.6em; line-height: 1.6;">RSL Group is a trading name of RSL Group Holdings Ltd, registered in England and Wales, company number 16056184. Registered office: Harlequin House, 7 High Street, Teddington, London, England, TW11 8EE.</p>
             </footer>
         </div>
         <script>

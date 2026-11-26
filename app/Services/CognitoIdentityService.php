@@ -288,7 +288,7 @@ class CognitoIdentityService
         }
 
         // Cognito may deliberately hide a missing account behind a generic
-        // ForgotPassword response. Check the directory first so the WordPress
+        // ForgotPassword response. Check the directory first so the legacy
         // fallback is deterministic and never runs for a Cognito identity.
         if (app(CognitoDirectory::class)->hasIdentity($email)) {
             $this->forgotPassword($email);

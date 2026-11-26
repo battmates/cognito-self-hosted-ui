@@ -112,7 +112,7 @@ class LegacyMigrationService
     }
 
     /**
-     * Look up a WordPress account only after Cognito has reported it missing.
+     * Look up a legacy account only after Cognito has reported it missing.
      * The reset code is still issued and verified exclusively by Cognito.
      */
     public function recoverForPasswordReset(string $identifier): ?string
@@ -121,17 +121,34 @@ class LegacyMigrationService
             return null;
         }
 
-        $provider = config('migration.providers.wordpress', []);
-        if (! ($provider['enabled'] ?? false)) {
+        $identity = null;
+        foreach (['cloud', 'wordpress'] as $source) {
+            $provider = config('migration.providers.'.$source, []);
+            if (! ($provider['enabled'] ?? false)) {
+                continue;
+            }
+            if ($source === 'cloud') {
+                $user = app(CloudMigrationClient::class)->lookupForPasswordRecovery($provider, $identifier);
+                if ($user !== null) {
+                    // Recovery requires the requested email itself to match, even
+                    // if Cloud happens to use another email as the username.
+                    if (! is_string($user['email'] ?? null) || strcasecmp($identifier, $user['email']) !== 0) {
+                        throw new RuntimeException('The legacy response does not match the requested account.');
+                    }
+                    $identity = $this->validatedIdentity('cloud', $user, $identifier, false);
+                }
+            } else {
+                $identity = $this->lookupWordPress($provider, $identifier);
+            }
+            if ($identity !== null) {
+                break;
+            }
+        }
+        if ($identity === null) {
             return null;
         }
 
-        $identity = $this->lookupWordPress($provider, $identifier);
-        if (! $identity) {
-            return null;
-        }
-
-        return Cache::lock('portal.recover.'.hash('sha256', strtolower($identity['email'])), 60)->block(3, function () use ($identity) {
+        return Cache::lock('portal.migrate.'.hash('sha256', strtolower($identity['email'])), 60)->block(3, function () use ($identity) {
             // A concurrent sign-up or migration always wins; do not overwrite it.
             foreach ($this->identityIdentifiers($identity) as $poolIdentifier) {
                 if ($username = $this->directory->resolveUsername($poolIdentifier)) {
@@ -208,7 +225,11 @@ class LegacyMigrationService
         if (! is_array($data) || ($data['authenticated'] ?? null) !== true || ! is_array($data['user'] ?? null)) {
             throw new RuntimeException('Legacy account verification returned an invalid response.');
         }
-        $user = $data['user'];
+        return $this->validatedIdentity($source, $data['user'], $identifier, $wordpress);
+    }
+
+    private function validatedIdentity(string $source, array $user, string $identifier, bool $wordpress): array
+    {
         foreach (['id', 'username', 'email'] as $key) {
             if (! is_string($user[$key] ?? null) || trim($user[$key]) === '' || strlen($user[$key]) > 256) {
                 throw new RuntimeException('The legacy account is missing required identity details. Please contact support.');

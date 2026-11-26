@@ -84,6 +84,53 @@ class CloudMigrationClient
         return $data;
     }
 
+    /** Look up an eligible recovery identity without authenticating the user. */
+    public function lookupForPasswordRecovery(array $provider, string $identifier): ?array
+    {
+        if (! filter_var($identifier, FILTER_VALIDATE_EMAIL)) {
+            return null;
+        }
+
+        $baseUrl = rtrim((string) ($provider['base_url'] ?? ''), '/');
+        $username = $provider['username'] ?? '';
+        $password = $provider['password'] ?? '';
+        if (! $this->validUrl($baseUrl) || ! is_string($username) || $username === '' || ! is_string($password) || $password === '') {
+            throw new RuntimeException('Cloud password recovery is not configured. Please contact support.');
+        }
+
+        $token = $this->token($baseUrl, $username, $password);
+        try {
+            $response = Http::withToken($token)->acceptJson()->asJson()
+                ->connectTimeout(5)->timeout(15)->withoutRedirecting()
+                ->post($baseUrl.'/backstage/ssoauthenticate', [
+                    'identifier' => $identifier, 'purpose' => 'password_recovery',
+                ]);
+        } catch (ConnectionException) {
+            Log::error('portal.cloud.recovery.failed', ['reason' => 'connection', 'http_status' => null]);
+            throw new RuntimeException('Cloud password recovery is unavailable. Please try again later.');
+        }
+
+        if ($response->status() === 404) {
+            return null;
+        }
+        if (! $response->ok()) {
+            Log::error('portal.cloud.recovery.failed', ['reason' => 'http_error', 'http_status' => $response->status()]);
+            throw new RuntimeException('Cloud password recovery is unavailable. Please try again later.');
+        }
+        $data = $response->json();
+        if (is_array($data) && ($data['found'] ?? null) === false
+            && array_key_exists('user', $data) && $data['user'] === null) {
+            return null;
+        }
+        // Login/credential rejection responses must never authorize recovery.
+        if (! is_array($data) || ($data['found'] ?? null) !== true
+            || ($data['authenticated'] ?? null) !== false || ! is_array($data['user'] ?? null)) {
+            throw new RuntimeException('Cloud password recovery returned an invalid response.');
+        }
+
+        return $data['user'];
+    }
+
     private function token(string $baseUrl, string $username, string $password): string
     {
         // Scope cached tokens to the endpoint and credentials, so rotating the

@@ -82,6 +82,7 @@ if (form && dialog && typeof dialog.showModal === 'function') {
         stageCount = 0;
         percent = creating ? 75 : 4;
         error.classList.add('hidden');
+        errorMessage.textContent = '';
         if (help) help.hidden = true;
         submit.disabled = true;
         submit.textContent = 'Signing in…';
@@ -118,7 +119,6 @@ if (form && dialog && typeof dialog.showModal === 'function') {
         dismiss.hidden = false;
         errorMessage.textContent = text;
         if (help) help.hidden = false;
-        error.classList.remove('hidden');
         dismiss.focus();
     };
 
@@ -219,6 +219,7 @@ if (form && dialog && typeof dialog.showModal === 'function') {
     dismiss.addEventListener('click', () => dialog.close());
     dialog.addEventListener('close', () => {
         if (!busy && !awaitingPassword) {
+            if (dialog.dataset.state === 'error') error.classList.remove('hidden');
             submit.disabled = false;
             submit.textContent = 'Sign in';
             form.elements.password.focus();

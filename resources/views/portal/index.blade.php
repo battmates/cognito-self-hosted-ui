@@ -182,27 +182,36 @@
                             </a>
                         </form>
                     @elseif ($page === 'reset-password')
-                        <form class="space-y-4" method="POST" action="{{ route('portal.password.reset.store') }}">
+                        <form data-reset-password data-requirements='@json($resetRequirements)' class="space-y-4" method="POST" action="{{ route('portal.password.reset.store') }}">
                             @csrf
                             @include('portal.partials.context-fields', ['portalContext' => $portalContext])
                             <h2 class="portal-heading text-2xl">Reset Password</h2>
+                            <p class="portal-copy text-sm">Choose a strong password that meets all the requirements below.</p>
+                            <ul class="password-requirements" data-password-requirements aria-label="New password requirements">
+                                @foreach (['minimum_length' => 'At least '.$resetRequirements['minimum_length'].' characters', 'uppercase' => 'An uppercase letter', 'lowercase' => 'A lowercase letter', 'numbers' => 'A number', 'symbols' => 'A symbol'] as $key => $label)
+                                    @if ($resetRequirements[$key])<li data-requirement="{{ $key }}"><span aria-hidden="true">○</span><span>{{ $label }}</span></li>@endif
+                                @endforeach
+                            </ul>
                             <div>
                                 <label class="portal-label mb-2 block text-sm font-semibold uppercase tracking-[0.14em]">Email or username</label>
-                                <input class="portal-input w-full rounded-xl border px-4 py-3 text-base outline-none focus:border-[#3da7c7]" type="text" name="email" value="{{ $defaultEmail }}" placeholder="Email or username">
+                                <input class="portal-input w-full rounded-xl border px-4 py-3 text-base outline-none focus:border-[#3da7c7]" type="text" name="email" value="{{ $defaultEmail }}" placeholder="Email or username" required>
+                                @error('email')<p class="mt-2 text-sm text-[#b56f2f]">{{ $message }}</p>@enderror
                             </div>
                             <div>
                                 <label class="portal-label mb-2 block text-sm font-semibold uppercase tracking-[0.14em]">Reset code</label>
-                                <input class="portal-input w-full rounded-xl border px-4 py-3 text-base outline-none focus:border-[#3da7c7]" type="text" name="code" value="{{ old('code') }}" placeholder="Reset code">
+                                <input class="portal-input w-full rounded-xl border px-4 py-3 text-base outline-none focus:border-[#3da7c7]" type="text" name="code" value="{{ $resetInput['code'] ?? old('code') }}" placeholder="Reset code" required>
                                 @error('code')<p class="mt-2 text-sm text-[#b56f2f]">{{ $message }}</p>@enderror
                             </div>
                             <div>
                                 <label class="portal-label mb-2 block text-sm font-semibold uppercase tracking-[0.14em]">New password</label>
-                                <input class="portal-input w-full rounded-xl border px-4 py-3 text-base outline-none focus:border-[#3da7c7]" type="password" name="password" placeholder="New password">
+                                <input class="portal-input w-full rounded-xl border px-4 py-3 text-base outline-none focus:border-[#3da7c7]" type="password" name="password" value="{{ $resetInput['password'] ?? '' }}" placeholder="New password" autocomplete="new-password" required maxlength="256" minlength="{{ $resetRequirements['minimum_length'] }}">
+                                @error('password')<p class="mt-2 text-sm text-[#b56f2f]" role="alert">{{ $message }}</p>@enderror
                             </div>
                             <div>
                                 <label class="portal-label mb-2 block text-sm font-semibold uppercase tracking-[0.14em]">Confirm new password</label>
-                                <input class="portal-input w-full rounded-xl border px-4 py-3 text-base outline-none focus:border-[#3da7c7]" type="password" name="password_confirmation" placeholder="Confirm new password">
+                                <input class="portal-input w-full rounded-xl border px-4 py-3 text-base outline-none focus:border-[#3da7c7]" type="password" name="password_confirmation" value="{{ $resetInput['password_confirmation'] ?? '' }}" placeholder="Confirm new password" autocomplete="new-password" required maxlength="256">
                             </div>
+                            <p class="portal-copy text-sm" data-password-match aria-live="polite"></p>
                             <button class="inline-flex w-full items-center justify-center rounded-xl bg-[#3da7c7] px-5 py-3 text-base font-semibold text-white transition hover:bg-[#3094b2]" type="submit">
                                 Update password
                             </button>
@@ -218,3 +227,7 @@
         @endif
     </main>
 @endsection
+
+@if ($page === 'reset-password')
+    @vite('resources/js/app.js')
+@endif

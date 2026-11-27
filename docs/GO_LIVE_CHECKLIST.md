@@ -12,7 +12,7 @@ Recovery test on 26 November: Matt subsequently confirmed Cloud login and ordina
 
 Recovery fix progress on 26 November: the colleague's recovery integration was pulled, and its response handling adjusted to accept Cloud's actual HTTP 200 `authenticated: false` plus `user` payload without requiring `found`. The fix and dependent recovery services were deployed to staging only. All 264 tests pass, including Cloud identity guards and fallback to the existing signed WordPress lookup. A read-only lookup from the updated staging code accepts the live API's test identity. Staging remains configured for the staging Cloud API, which returns 404/no match for that live test account. Full staging reset-email/password completion and production deployment of the compatibility fix remain pending. No test identity was provisioned and no reset email sent by these checks.
 
-Launch the portal for Cloud, Backstage, Guestlist and Greenroom first. MusicTeacher stays disabled with a grey Coming soon card until the separate activation steps below are completed. Use this checklist during the change; tick an item only after its stated check succeeds.
+Launch sequence: Cloud, Backstage, Guestlist and Greenroom first, then MusicTeacher using the separate activation steps below. MusicTeacher was subsequently activated on 26 November; its deployment verification is recorded in that section. Use this checklist during the change; tick an item only after its stated check succeeds.
 
 ## Launch details
 
@@ -120,7 +120,7 @@ Keep existing Backstage, Guestlist and Greenroom sessions intact. Do not perform
 - [x] Cloud login through the corrected callback reaches `/secure`, and the protected Downloads page is accessible in Matt's Chrome session.
 - [ ] Cloud: explicitly sign out and back in, verifying the deployed sign-out destination.
 - [ ] Test a fresh browser session, an existing app session and switching between applications. Confirm expected roles and access permissions.
-- [ ] Confirm MusicTeacher remains Coming soon and no MusicTeacher migration messages or requests occur. Existing Cognito identities remain usable for the other applications.
+- [x] MusicTeacher was deferred during the initial cutover, then explicitly activated in the separate phase below. Its card and migration routes are now active.
 - [ ] Monitor portal, Cloud and linked-app logs for callback errors, `invalid_grant`, verification errors and HTTP 5xx responses. Do not copy passwords, tokens or full authentication URLs into the checklist.
 - [ ] Record acceptance time and owner: __________. Keep monitoring through the agreed observation period: __________.
 
@@ -128,15 +128,22 @@ Keep existing Backstage, Guestlist and Greenroom sessions intact. Do not perform
 
 Complete this section only after the initial portal cutover is accepted. Production destination is **`https://profile.musicteacher.com/`**, not the marketing site's bare domain.
 
+Activated on 26 November 2026. Copied the tested staging child-theme override to live Kinsta at `/www/musicteacherg_987/public/wp-content/themes/buddyboss-theme-child/buddypress/members/single/settings/general.php`. No previous override existed. Verified PHP syntax, template selection and browser rendering: the email form remains, legacy `pass1`/`pass2` fields are absent, and the Cognito shortcode renders once outside the email form on the user's own profile. No password was submitted or changed during these checks.
+
+Only plugin settings `login_enabled` (1) and `role_blacklist` (`learner,parent`, explicitly approved by Matt) changed. Existing auto-redirect and logout flags remain 0, administrative sync remains disabled, and JWT verification remains enabled. The portal's six MusicTeacher URL/enable settings were applied and configuration cached. The shared client and migration secrets matched before activation; neither was changed. Public login URLs redirect through the portal, and an authorization-code round trip in Chrome returned to the authenticated MusicTeacher dashboard and profile settings. The portal card is active for the tested administrator account.
+
+Rollback copies: previous plugin settings are in `/www/musicteacherg_987/rsl-sso-launch-20261126/wcsso-settings-before.json` outside the web root with mode 0600; the production portal has a private `.env.before-musicteacher-launch-*` backup in its `private_html` directory. The existing email-change flow still requires the local WordPress password for non-administrators, as agreed in the staging template work.
+
 ### Prepare Kinsta and the plugin
 
 - [ ] Take a Kinsta backup and preserve local WordPress administrator access for recovery.
-- [ ] Install the approved WP Cognito SSO plugin package, including production dependencies. Configure it as on staging, using live values rather than copying staging credentials.
-- [ ] Set the plugin Cognito domain to `auth.rslgroup.io` without scheme or path. Use live pool `eu-west-2_pg2smtPib`, region `eu-west-2`, shared client ID `7gmkvrve0vnn7q28dl1jeq790d`, and its existing client secret from secure storage.
-- [ ] Set callback path `/cognito-login`, logout destination path `/logout`, and scopes `openid email profile`. These resolve to the exact URLs in the environment block below.
-- [ ] Preserve the tested staging role mappings, provisioning and redirect settings. Keep JWT verification enabled. Configure the plugin's role blacklist to include `learner,parent`; hiding portal cards alone does not prevent direct sign-in.
-- [ ] Set the plugin's Cognito user migration shared secret to match production portal `MIGRATION_WORDPRESS_SHARED_SECRET`. That value was retained when migration was disabled; confirm it matches rather than replacing it with a placeholder. The existing `MIGRATION_WORDPRESS_API_TOKEN` is a legacy fallback and need not be changed when an explicit shared secret is configured.
-- [ ] Keep optional WordPress-to-Cognito administrative sync disabled unless separately approved; it is distinct from sign-in and legacy migration.
+- [x] Saved a private backup of the plugin settings before changes. Full Kinsta backup/restore confirmation remains separate above.
+- [x] Existing live plugin is installed and its password shortcode is available; no plugin files were replaced during activation.
+- [x] Verified plugin domain, live pool, region and shared client settings; client secret matches the portal.
+- [x] Verified callback `/cognito-login`, sign-out destination `/logout` and scopes `openid email profile`.
+- [x] Preserved role mappings/provisioning/redirect settings; JWT verification remains enabled. Set the plugin role blacklist to `learner,parent` with explicit approval.
+- [x] Migration shared secret matches production portal `MIGRATION_WORDPRESS_SHARED_SECRET`; retained existing secret and legacy fallback setting.
+- [x] Optional WordPress-to-Cognito administrative sync remains disabled.
 - [ ] Exclude `/login/`, `/wp-login.php`, `/cognito-login`, `/logout` and the migration REST endpoints from interfering caches or authentication challenges. Confirm Kinsta/security rules allow server-to-server POST requests and the migration HMAC headers.
 - [ ] Confirm both migration routes are provided by the plugin and accessible to the portal. An unauthenticated request should not return identity data; test with the trusted portal and a designated account.
 
@@ -165,10 +172,13 @@ php artisan config:cache
 
 Do not run `key:generate`, copy a staging `.env`, or clear all user sessions as part of activation. GitHub Actions preserves the server `.env`; adding these values to `.env.example` alone would not configure production.
 
-- [ ] Read back effective `sso.consumers.musicteacher` and the WordPress migration enabled flag and endpoint values without printing credentials.
-- [ ] Enable the plugin's sign-in behaviour and the intended logout behaviour; verify its login/callback/logout routes.
-- [ ] Confirm the card is active for permitted roles and hidden for learner/parent roles.
-- [ ] Test an existing Cognito account signing in from MusicTeacher and through the portal card.
+- [x] Read back effective MusicTeacher destination/allowlists and migration enabled flag after rebuilding production configuration.
+- [x] Enabled Hosted UI login and verified the login redirect, portal authorization-code exchange and authenticated return to MusicTeacher in Chrome.
+- [ ] Verify logout behaviour separately. The existing plugin `logout_enabled=0` setting was retained; it was not enabled during this launch.
+- [x] Confirmed the MusicTeacher card is active for the tested administrator account. Existing learner/parent card filtering was retained.
+- [x] Completed an existing Cognito account's authorization round trip and opened its MusicTeacher profile settings. Public `/login/` and `/wp-login.php` redirects also reach the portal with the exact live callback.
+- [x] Signed recovery lookup for a nonexistent account was accepted by the live plugin and returned HTTP 404 with `ok:false`, not a missing-route error.
+- [x] Signed recovery lookup for the existing test identity returned a matching normalized WordPress identity. This was read-only: no Cognito provisioning, reset email or password change was performed.
 - [ ] Test a designated legacy MusicTeacher-only account through migration and verify its WordPress access and Cognito identity/role.
 - [ ] Test password recovery for a designated not-yet-migrated account.
 - [ ] Test learner/parent denial through direct MusicTeacher SSO, and test logout plus a subsequent login.

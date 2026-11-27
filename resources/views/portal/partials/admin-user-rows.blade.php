@@ -14,8 +14,8 @@
         };
     @endphp
     <tr class="border-b portal-divider" data-user-row="{{ $user['Username'] }}">
-        <td class="py-4 pr-5"><a class="text-[#3da7c7] font-semibold break-all" href="{{ route('portal.admin.users', array_merge(request()->only('field', 'q'), ['username' => $user['Username']])) }}">{{ $user['Username'] }}</a></td>
-        <td class="py-4 pr-5 text-sm break-all">{{ $attrs['email'] ?? 'No email' }}</td>
+        <td class="py-4 pr-5"><a class="text-[#3da7c7] font-semibold" href="{{ route('portal.admin.users', array_merge(request()->only('field', 'q'), ['username' => $user['Username']])) }}">{{ $user['Username'] }}</a></td>
+        <td class="py-4 pr-5 text-sm">{{ $attrs['email'] ?? 'No email' }}</td>
         <td class="py-4 pr-5"><span class="portal-status-badge portal-status-badge--{{ $emailVerified ? 'success' : 'neutral' }}">{{ $emailVerified ? 'Verified' : 'Not verified' }}</span></td>
         <td class="py-4 pr-5"><span class="portal-status-badge portal-status-badge--{{ $confirmationStyle }}">{{ $confirmationLabel }}</span></td>
         <td class="py-4"><span class="portal-status-badge portal-status-badge--{{ $user['Enabled'] ? 'success' : 'danger' }}">{{ $user['Enabled'] ? 'Enabled' : 'Disabled' }}</span></td>

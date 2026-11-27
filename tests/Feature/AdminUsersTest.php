@@ -360,7 +360,7 @@ class AdminUsersTest extends TestCase
         $this->mock(CognitoDirectory::class, function ($mock) {
             $mock->shouldReceive('get')->with('admin-user')->once()->andReturn(['Enabled' => true]);
             $mock->shouldReceive('isAdministrator')->once()->andReturn(true);
-            $mock->shouldReceive('search')->with('username', 'target', null)->once()->andReturn([
+            $mock->shouldReceive('search')->with('username', 'target', null, false)->once()->andReturn([
                 'Users' => [['Username' => 'target-user', 'Enabled' => true, 'UserStatus' => 'CONFIRMED', 'Attributes' => [['Name' => 'email', 'Value' => 'target@example.com']]]],
                 'PaginationToken' => 'next-page',
             ]);
@@ -383,9 +383,28 @@ class AdminUsersTest extends TestCase
         $this->mock(CognitoDirectory::class, function ($mock) {
             $mock->shouldReceive('get')->with('admin-user')->andReturn(['Enabled' => true]);
             $mock->shouldReceive('isAdministrator')->andReturn(true);
-            $mock->shouldReceive('search')->with('email', '', null)->once()->andReturn(['Users' => []]);
+            $mock->shouldReceive('search')->with('email', '', null, false)->once()->andReturn(['Users' => []]);
         });
         $this->withSession($this->adminSession())->getJson('/admin/users?field=email&q=')->assertOk()->assertJsonPath('count', 0)->assertJsonPath('has_more', false);
+    }
+
+    public function test_full_email_uses_exact_search_and_returns_every_matching_account(): void
+    {
+        $this->mock(CognitoDirectory::class, function ($mock) {
+            $mock->shouldReceive('get')->with('admin-user')->once()->andReturn(['Enabled' => true]);
+            $mock->shouldReceive('isAdministrator')->once()->andReturn(true);
+            $mock->shouldReceive('search')->with('email', 'target@example.com', null, true)->once()->andReturn([
+                'Users' => [
+                    ['Username' => 'target-user', 'Enabled' => true],
+                    ['Username' => 'google_target', 'Enabled' => true],
+                ],
+            ]);
+        });
+
+        $response = $this->withSession($this->adminSession())->getJson('/admin/users?field=email&q=target%40example.com')
+            ->assertOk()->assertJsonPath('count', 2)->assertJsonPath('has_more', false);
+        $this->assertStringContainsString('data-user-row="target-user"', $response->json('rows'));
+        $this->assertStringContainsString('data-user-row="google_target"', $response->json('rows'));
     }
 
     public function test_live_search_returns_json_when_the_session_expires_or_directory_fails(): void
@@ -433,7 +452,7 @@ class AdminUsersTest extends TestCase
         $this->mock(CognitoDirectory::class, function ($mock) {
             $mock->shouldReceive('get')->with('admin-user')->andReturn(['Enabled' => true]);
             $mock->shouldReceive('isAdministrator')->andReturn(true);
-            $mock->shouldReceive('search')->with('username', 'target', 'opaque-next-batch')->once()->andReturn([
+            $mock->shouldReceive('search')->with('username', 'target', 'opaque-next-batch', false)->once()->andReturn([
                 'Users' => [['Username' => 'target-two', 'Enabled' => true, 'UserStatus' => 'CONFIRMED']],
             ]);
         });
@@ -449,7 +468,7 @@ class AdminUsersTest extends TestCase
         $this->mock(CognitoDirectory::class, function ($mock) {
             $mock->shouldReceive('get')->with('admin-user')->andReturn(['Enabled' => true]);
             $mock->shouldReceive('isAdministrator')->andReturn(true);
-            $mock->shouldReceive('search')->with('email', '', null)->andReturn(['Users' => [], 'PaginationToken' => 'next']);
+            $mock->shouldReceive('search')->with('email', '', null, false)->andReturn(['Users' => [], 'PaginationToken' => 'next']);
         });
         $this->withSession($this->adminSession())->get('/admin/users')->assertOk()->assertSee('Load more')->assertDontSee('Next page');
         $this->withSession($this->adminSession())->getJson('/admin/users')->assertOk()->assertJsonPath('count', 0)->assertJsonPath('has_more', true)->assertJsonPath('cursor', 'next');

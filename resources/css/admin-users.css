@@ -21,6 +21,18 @@
     color: var(--portal-heading);
 }
 
+#admin-search-results table.dataTable > thead > tr > th:first-child {
+    min-width: 10rem;
+}
+
+#admin-search-results table.dataTable > thead > tr > th:nth-child(2) {
+    min-width: 13rem;
+}
+
+#admin-search-results[aria-busy="true"] .dt-empty {
+    visibility: hidden;
+}
+
 #admin-search-results table.dataTable > tbody > tr > td {
     padding: 1rem 1.25rem 1rem 0;
     border-bottom: 1px solid var(--portal-divider);

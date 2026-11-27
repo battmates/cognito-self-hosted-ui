@@ -23,7 +23,10 @@ class AdminUsersController extends Controller
         try {
             $hasSelection = isset($input['username']) && $input['username'] !== '';
             $selected = $hasSelection ? $directory->get($input['username']) : null;
-            $page = $hasSelection ? [] : $directory->search($input['field'] ?? 'email', $input['q'] ?? '', $input['cursor'] ?? null);
+            $field = $input['field'] ?? 'email';
+            $query = $input['q'] ?? '';
+            $exactEmail = $field === 'email' && filter_var($query, FILTER_VALIDATE_EMAIL) !== false;
+            $page = $hasSelection ? [] : $directory->search($field, $query, $input['cursor'] ?? null, $exactEmail);
         } catch (RuntimeException $e) {
             if ($request->expectsJson()) {
                 return response()->json(['message' => $e->getMessage()], 503);

@@ -31,7 +31,7 @@ import { adaptManagementTable } from './responsive-table';
             { targets: [2, 3, 4], responsivePriority: 10 },
             { targets: 5, orderable: false, searchable: false, responsivePriority: 1 },
         ],
-        language: { emptyTable: 'No accounts loaded.' },
+        language: { emptyTable: 'No accounts to display.' },
     });
 
     adaptManagementTable(table);
@@ -103,7 +103,7 @@ import { adaptManagementTable } from './responsive-table';
                 });
                 // Use DataTables' API so sorting and its internal row cache stay in sync.
                 table.rows.add(newRows).draw(false);
-                table.responsive.recalc();
+                table.columns.adjust().responsive.recalc();
                 updateCursor(data.cursor);
                 if (!append) history.replaceState({}, '', url);
                 describeResults(data.cursor);

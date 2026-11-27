@@ -6,6 +6,7 @@ use App\Exceptions\CognitoException;
 use App\Exceptions\MigrationPasswordRequiredException;
 use App\Services\AuthorizationBroker;
 use App\Services\CognitoIdentityService;
+use App\Services\CognitoDirectory;
 use App\Services\ProfileSynchronization;
 use App\Services\LoginProgress;
 use App\Services\MigrationPasswordChallenge;
@@ -13,8 +14,11 @@ use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\MessageBag;
+use Illuminate\Support\ViewErrorBag;
 use Illuminate\Validation\ValidationException;
 use RuntimeException;
 
@@ -364,21 +368,41 @@ class AuthPortalController extends Controller
             ->with('portal.notice', 'A password reset code has been sent.');
     }
 
-    public function storeResetPassword(Request $request): RedirectResponse
+    public function storeResetPassword(Request $request): RedirectResponse|Response
     {
         $this->capturePortalContext($request);
-        $validated = $request->validate([
-            'email' => ['required', 'string', 'max:128'],
-            'code' => ['required', 'string'],
-            'password' => ['required', 'string', 'confirmed', 'max:256'],
-        ]);
-
         try {
-            $this->identity->confirmForgotPassword($validated['email'], $validated['code'], $validated['password']);
-        } catch (RuntimeException $exception) {
-            throw ValidationException::withMessages([
-                'code' => [$exception->getMessage()],
+            $requirements = app(CognitoDirectory::class)->migrationPasswordPolicy();
+            $passwordRules = ['required', 'string', 'confirmed', 'max:256', 'min:'.$requirements['minimum_length']];
+            foreach (['uppercase' => '/[A-Z]/', 'lowercase' => '/[a-z]/', 'numbers' => '/[0-9]/', 'symbols' => '/[^a-zA-Z0-9\s]/u'] as $requirement => $pattern) {
+                if ($requirements[$requirement]) {
+                    $passwordRules[] = 'regex:'.$pattern;
+                }
+            }
+            $validated = $request->validate([
+                'email' => ['required', 'string', 'max:128'],
+                'code' => ['required', 'string'],
+                'password' => $passwordRules,
+            ], [
+                'password.min' => 'Please choose a stronger password that meets all the requirements shown below.',
+                'password.regex' => 'Please choose a stronger password that meets all the requirements shown below.',
             ]);
+            $this->identity->confirmForgotPassword($validated['email'], $validated['code'], $validated['password']);
+        } catch (ValidationException $exception) {
+            $errors = $exception->errors();
+        } catch (RuntimeException $exception) {
+            $passwordRejected = $exception instanceof CognitoException && str_contains($exception->awsType, 'InvalidPasswordException');
+            $errors = [$passwordRejected ? 'password' : 'code' => [$passwordRejected
+                ? 'Please choose a stronger password that meets all the requirements shown below.'
+                : $exception->getMessage()]];
+        }
+
+        if (isset($errors)) {
+            // Keep values in this response only; never flash passwords or reset codes into the session.
+            return response($this->renderPage($request, 'reset-password')->with([
+                'resetInput' => $request->only(['code', 'password', 'password_confirmation']),
+                'errors' => (new ViewErrorBag)->put('default', new MessageBag($errors)),
+            ]), 422)->header('Cache-Control', 'no-store');
         }
 
         return redirect()
@@ -545,6 +569,7 @@ class AuthPortalController extends Controller
             'authStatus' => $authStatus,
             'socialProviders' => $this->identity->socialProviders(),
             'applications' => $applications,
+            'resetRequirements' => $page === 'reset-password' ? app(CognitoDirectory::class)->migrationPasswordPolicy() : null,
         ]);
     }
 
